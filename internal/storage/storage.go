@@ -439,6 +439,44 @@ func (s *Storage) GetFactsForBlock(blockID string) ([]models.Fact, error) {
 	return facts, nil
 }
 
+// SearchFacts searches for facts relevant to a query string
+// Searches both keys and values for keyword matches
+func (s *Storage) SearchFacts(query string, maxResults int) ([]models.Fact, error) {
+	// Simple keyword search in both key and value columns
+	searchPattern := "%" + query + "%"
+
+	rows, err := s.db.Query(`
+		SELECT fact_id, block_id, turn_id, key, value, confidence, created_at
+		FROM facts
+		WHERE key LIKE ? OR value LIKE ?
+		ORDER BY confidence DESC, created_at DESC
+		LIMIT ?
+	`, searchPattern, searchPattern, maxResults)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query facts: %w", err)
+	}
+	defer rows.Close()
+
+	facts := []models.Fact{}
+	for rows.Next() {
+		var fact models.Fact
+		if err := rows.Scan(
+			&fact.FactID,
+			&fact.BlockID,
+			&fact.TurnID,
+			&fact.Key,
+			&fact.Value,
+			&fact.Confidence,
+			&fact.CreatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan fact: %w", err)
+		}
+		facts = append(facts, fact)
+	}
+
+	return facts, nil
+}
+
 // extractAndSaveFacts is a placeholder that will be replaced by FactScrubber
 // This method is called by StoreTurn but currently does nothing
 // The actual fact extraction should be done by calling FactScrubber.ExtractAndSave explicitly
@@ -576,4 +614,14 @@ func (s *Storage) AppendTurnToBlock(blockID string, turn *models.Turn) error {
 	}
 
 	return s.saveBridgeBlock(block)
+}
+
+// GetUserProfile loads the user profile from disk
+func (s *Storage) GetUserProfile() (*models.UserProfile, error) {
+	return models.LoadUserProfile()
+}
+
+// SaveUserProfile saves the user profile to disk
+func (s *Storage) SaveUserProfile(profile *models.UserProfile) error {
+	return profile.Save()
 }
