@@ -1,0 +1,30 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+bin/
+dist/
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go workspace file
+go.work
+
+# Scratch scenarios (never commit)
+.scratch/
+
+# Local data directory
+data/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
