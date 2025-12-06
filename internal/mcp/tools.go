@@ -10,12 +10,13 @@ import (
 )
 
 // RegisterTools registers all MCP tools with the server
-func RegisterTools(server *mcpserver.MCPServer, store *storage.Storage, governor *core.Governor, chunkEngine *core.ChunkEngine) {
+func RegisterTools(server *mcpserver.MCPServer, store *storage.Storage, governor *core.Governor, chunkEngine *core.ChunkEngine, scribe *core.Scribe) {
 	// Initialize handlers
 	handlers := &Handlers{
 		storage:     store,
 		governor:    governor,
 		chunkEngine: chunkEngine,
+		scribe:      scribe,
 	}
 
 	// 1. store_conversation - Store a conversation turn in HMLR memory system

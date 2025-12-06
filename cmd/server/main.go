@@ -7,6 +7,7 @@ import (
 	"os"
 
 	"github.com/harper/remember-standalone/internal/core"
+	"github.com/harper/remember-standalone/internal/llm"
 	"github.com/harper/remember-standalone/internal/mcp"
 	"github.com/harper/remember-standalone/internal/storage"
 	"github.com/joho/godotenv"
@@ -37,6 +38,18 @@ func main() {
 	// Initialize ChunkEngine for hierarchical chunking
 	chunkEngine := core.NewChunkEngine()
 
+	// Initialize Scribe for user profile learning (optional - only if API key is set)
+	var scribe *core.Scribe
+	if apiKey := os.Getenv("OPENAI_API_KEY"); apiKey != "" {
+		openaiClient, err := llm.NewOpenAIClient(apiKey)
+		if err != nil {
+			log.Printf("Warning: Failed to initialize OpenAI client for Scribe: %v", err)
+		} else {
+			scribe = core.NewScribe(openaiClient)
+			log.Println("Scribe agent initialized for user profile learning")
+		}
+	}
+
 	// Create MCP server
 	server := mcpserver.NewMCPServer(
 		"HMLR Memory System",
@@ -44,7 +57,7 @@ func main() {
 	)
 
 	// Register MCP tools
-	mcp.RegisterTools(server, store, governor, chunkEngine)
+	mcp.RegisterTools(server, store, governor, chunkEngine, scribe)
 
 	// Start server with stdio transport
 	log.Println("HMLR MCP server starting on stdio...")

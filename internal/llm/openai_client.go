@@ -34,6 +34,11 @@ func NewOpenAIClient(apiKey string) (*OpenAIClient, error) {
 	}, nil
 }
 
+// GetClient returns the underlying OpenAI client for direct use
+func (c *OpenAIClient) GetClient() *openai.Client {
+	return c.client
+}
+
 // GenerateEmbedding generates a 1536-dimensional embedding vector using text-embedding-3-small
 func (c *OpenAIClient) GenerateEmbedding(text string) ([]float64, error) {
 	var lastErr error

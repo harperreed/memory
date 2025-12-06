@@ -20,6 +20,7 @@ type Handlers struct {
 	storage     *storage.Storage
 	governor    *core.Governor
 	chunkEngine *core.ChunkEngine
+	scribe      *core.Scribe
 }
 
 // StoreConversation handles the store_conversation tool
@@ -99,6 +100,24 @@ func (h *Handlers) StoreConversation(ctx context.Context, request mcp.CallToolRe
 	facts, err := h.storage.GetFactsForBlock(blockID)
 	if err == nil {
 		factsExtracted = len(facts)
+	}
+
+	// Trigger Scribe async to update user profile (fire-and-forget)
+	if h.scribe != nil {
+		profile, err := h.storage.GetUserProfile()
+		if err == nil {
+			// If no profile exists, create empty one
+			if profile == nil {
+				profile = &models.UserProfile{
+					Name:             "",
+					Preferences:      []string{},
+					TopicsOfInterest: []string{},
+					LastUpdated:      time.Now(),
+				}
+			}
+			// Run Scribe async - don't wait for it
+			go h.scribe.UpdateProfileAsync(message, profile, h.storage)
+		}
 	}
 
 	// Build response
@@ -232,22 +251,33 @@ func (h *Handlers) GetTopicHistory(ctx context.Context, request mcp.CallToolRequ
 
 // GetUserProfile handles the get_user_profile tool
 func (h *Handlers) GetUserProfile(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	// Stub implementation - return placeholder profile
-	// TODO: Implement actual user profile management with Scribe agent
+	// Load user profile from storage
+	profile, err := h.storage.GetUserProfile()
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to load profile: %v", err)), nil
+	}
 
-	profile := map[string]interface{}{
+	// If no profile exists, return empty profile
+	if profile == nil {
+		profile = &models.UserProfile{
+			Name:             "",
+			Preferences:      []string{},
+			TopicsOfInterest: []string{},
+			LastUpdated:      time.Now(),
+		}
+	}
+
+	// Build response
+	response := map[string]interface{}{
 		"profile": map[string]interface{}{
-			"name": "User",
-			"preferences": map[string]interface{}{
-				"language":             "Go",
-				"framework_preference": "simple_over_complex",
-			},
-			"topics_of_interest": []string{"MCP", "AI Memory Systems", "Go Development"},
-			"last_updated":       time.Now().Format(time.RFC3339),
+			"name":               profile.Name,
+			"preferences":        profile.Preferences,
+			"topics_of_interest": profile.TopicsOfInterest,
+			"last_updated":       profile.LastUpdated.Format(time.RFC3339),
 		},
 	}
 
-	responseJSON, err := json.Marshal(profile)
+	responseJSON, err := json.Marshal(response)
 	if err != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("failed to marshal response: %v", err)), nil
 	}
