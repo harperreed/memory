@@ -271,28 +271,18 @@ func (s *Storage) GetFactsForBlock(blockID string) ([]models.Fact, error) {
 	return facts, nil
 }
 
-// extractAndSaveFacts extracts facts from a turn and saves them to SQLite
+// extractAndSaveFacts is a placeholder that will be replaced by FactScrubber
+// This method is called by StoreTurn but currently does nothing
+// The actual fact extraction should be done by calling FactScrubber.ExtractAndSave explicitly
 func (s *Storage) extractAndSaveFacts(turn *models.Turn, blockID string) error {
-	// Simple fact extraction for now
-	// TODO: Implement full FactScrubber with LLM
+	// Fact extraction is now handled by FactScrubber
+	// This method is kept for backward compatibility but does nothing
+	return nil
+}
 
-	// Example: Extract "capital of X is Y" pattern
-	facts := []models.Fact{}
-
-	// Hardcoded example for testing
-	if containsIgnoreCase(turn.UserMessage, "capital") && containsIgnoreCase(turn.AIResponse, "Paris") {
-		facts = append(facts, models.Fact{
-			FactID:     "fact_" + uuid.New().String(),
-			BlockID:    blockID,
-			TurnID:     turn.TurnID,
-			Key:        "capital_of_France",
-			Value:      "Paris",
-			Confidence: 1.0,
-			CreatedAt:  time.Now(),
-		})
-	}
-
-	// Save facts to database
+// SaveFacts saves a slice of facts to the database
+// Called by FactScrubber after extracting facts
+func (s *Storage) SaveFacts(facts []models.Fact) error {
 	for _, fact := range facts {
 		_, err := s.db.Exec(`
 			INSERT INTO facts (fact_id, block_id, turn_id, key, value, confidence, created_at)
