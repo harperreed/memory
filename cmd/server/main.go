@@ -4,14 +4,26 @@ package main
 
 import (
 	"log"
+	"os"
 
 	"github.com/harper/remember-standalone/internal/core"
 	"github.com/harper/remember-standalone/internal/mcp"
 	"github.com/harper/remember-standalone/internal/storage"
+	"github.com/joho/godotenv"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 )
 
 func main() {
+	// Load .env file if it exists (for API keys)
+	if err := godotenv.Load(); err != nil {
+		log.Printf("No .env file found (this is okay for production): %v", err)
+	}
+
+	// Verify we have required API keys
+	if os.Getenv("OPENAI_API_KEY") == "" {
+		log.Println("Warning: OPENAI_API_KEY not set - embeddings and LLM features will not work")
+	}
+
 	// Initialize storage with XDG-compliant paths
 	store, err := storage.NewStorage()
 	if err != nil {
