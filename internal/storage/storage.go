@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/adrg/xdg"
@@ -87,9 +88,27 @@ func (s *Storage) Close() error {
 }
 
 // StoreTurn stores a conversation turn and creates/updates a Bridge Block
+// INVARIANT: Only ONE block can be ACTIVE at a time. This is enforced by validation and maintained by this function.
 func (s *Storage) StoreTurn(turn *models.Turn) (string, error) {
 	// For now, create a new Bridge Block for each turn (simplified routing)
 	// TODO: Implement full Governor routing logic (4 scenarios)
+
+	// Validate active block cardinality - only one block should be ACTIVE at a time
+	activeBlocks, err := s.GetActiveBridgeBlocks()
+	if err != nil {
+		return "", fmt.Errorf("failed to check active blocks: %w", err)
+	}
+	if len(activeBlocks) > 1 {
+		return "", fmt.Errorf("invariant violation: found %d active blocks, expected at most 1", len(activeBlocks))
+	}
+
+	// Before creating a new active block, pause any existing active block
+	// This maintains the invariant that only ONE block can be ACTIVE at a time
+	if len(activeBlocks) == 1 {
+		if err := s.UpdateBridgeBlockStatus(activeBlocks[0].BlockID, models.StatusPaused); err != nil {
+			return "", fmt.Errorf("failed to pause existing active block: %w", err)
+		}
+	}
 
 	today := time.Now().Format("2006-01-02")
 	blockID := fmt.Sprintf("block_%s_%s", time.Now().Format("20060102_150405"), uuid.New().String()[:8])
@@ -307,29 +326,7 @@ func matchesQuery(block *models.BridgeBlock, query string) bool {
 }
 
 func containsIgnoreCase(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
-		contains(toLower(s), toLower(substr)))
-}
-
-func toLower(s string) string {
-	b := make([]byte, len(s))
-	for i := range s {
-		c := s[i]
-		if 'A' <= c && c <= 'Z' {
-			c += 'a' - 'A'
-		}
-		b[i] = c
-	}
-	return string(b)
-}
-
-func contains(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
+	return strings.Contains(strings.ToLower(s), strings.ToLower(substr))
 }
 
 // GetActiveBridgeBlocks retrieves all Bridge Blocks with ACTIVE status

@@ -4,6 +4,7 @@ package core
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/harper/remember-standalone/internal/models"
 	"github.com/harper/remember-standalone/internal/storage"
@@ -11,13 +12,15 @@ import (
 
 // Governor is the smart router that decides routing scenarios
 type Governor struct {
-	storage *storage.Storage
+	storage               *storage.Storage
+	topicMatchThreshold   float64 // Threshold for keyword overlap (0.0-1.0, default 0.3 for 30%)
 }
 
 // NewGovernor creates a new Governor instance
 func NewGovernor(store *storage.Storage) *Governor {
 	return &Governor{
-		storage: store,
+		storage:             store,
+		topicMatchThreshold: 0.3, // Default to 30% keyword overlap
 	}
 }
 
@@ -92,35 +95,27 @@ func (g *Governor) matchesTopic(turn *models.Turn, block *models.BridgeBlock) bo
 		}
 	}
 
-	// Match by keywords (need at least 1 keyword overlap)
+	// Match by keywords - require at least 30% keyword overlap
+	if len(turn.Keywords) == 0 || len(block.Keywords) == 0 {
+		return false
+	}
+
 	matchCount := 0
 	for _, turnKeyword := range turn.Keywords {
 		for _, blockKeyword := range block.Keywords {
 			if g.keywordMatch(turnKeyword, blockKeyword) {
 				matchCount++
+				break // Count each turn keyword only once
 			}
 		}
 	}
 
-	// Consider it a match if we have at least 1 keyword overlap
-	// This is a simple heuristic; could be enhanced with similarity scoring
-	return matchCount > 0
+	// Calculate overlap as a percentage of turn keywords
+	overlapRatio := float64(matchCount) / float64(len(turn.Keywords))
+	return overlapRatio >= g.topicMatchThreshold
 }
 
 // keywordMatch checks if two keywords match (case-insensitive)
 func (g *Governor) keywordMatch(k1, k2 string) bool {
-	return toLower(k1) == toLower(k2)
-}
-
-// Helper function for case-insensitive comparison
-func toLower(s string) string {
-	b := make([]byte, len(s))
-	for i := range s {
-		c := s[i]
-		if 'A' <= c && c <= 'Z' {
-			c += 'a' - 'A'
-		}
-		b[i] = c
-	}
-	return string(b)
+	return strings.ToLower(k1) == strings.ToLower(k2)
 }
