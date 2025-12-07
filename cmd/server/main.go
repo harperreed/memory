@@ -3,8 +3,11 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/harper/remember-standalone/internal/core"
 	"github.com/harper/remember-standalone/internal/llm"
@@ -30,7 +33,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to initialize storage: %v", err)
 	}
-	defer store.Close()
 
 	// Initialize Governor for smart routing
 	governor := core.NewGovernor(store)
@@ -38,15 +40,17 @@ func main() {
 	// Initialize ChunkEngine for hierarchical chunking
 	chunkEngine := core.NewChunkEngine()
 
-	// Initialize Scribe for user profile learning (optional - only if API key is set)
+	// Initialize OpenAI client and Scribe for user profile learning (optional - only if API key is set)
 	var scribe *core.Scribe
+	var openaiClient *llm.OpenAIClient
 	if apiKey := os.Getenv("OPENAI_API_KEY"); apiKey != "" {
-		openaiClient, err := llm.NewOpenAIClient(apiKey)
+		client, err := llm.NewOpenAIClient(apiKey)
 		if err != nil {
-			log.Printf("Warning: Failed to initialize OpenAI client for Scribe: %v", err)
+			log.Printf("Warning: Failed to initialize OpenAI client: %v", err)
 		} else {
+			openaiClient = client
 			scribe = core.NewScribe(openaiClient)
-			log.Println("Scribe agent initialized for user profile learning")
+			log.Println("OpenAI client and Scribe agent initialized")
 		}
 	}
 
@@ -56,12 +60,40 @@ func main() {
 		"0.1.0",
 	)
 
-	// Register MCP tools
-	mcp.RegisterTools(server, store, governor, chunkEngine, scribe)
+	// Register MCP tools and get handlers for shutdown
+	handlers := mcp.RegisterTools(server, store, governor, chunkEngine, scribe, openaiClient)
 
-	// Start server with stdio transport
+	// Setup graceful shutdown
+	ctx, stop := signal.NotifyContext(context.Background(),
+		os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	log.Println("HMLR MCP server starting on stdio...")
-	if err := mcpserver.ServeStdio(server); err != nil {
-		log.Fatalf("Server error: %v", err)
+
+	// Start server in goroutine
+	serverErr := make(chan error, 1)
+	go func() {
+		serverErr <- mcpserver.ServeStdio(server)
+	}()
+
+	// Wait for shutdown signal or server error
+	select {
+	case <-ctx.Done():
+		log.Println("Shutdown signal received, gracefully shutting down...")
+
+		// Wait for all async Scribe operations to complete
+		handlers.Shutdown()
+
+		// Close storage (flushes pending writes, closes DB)
+		if err := store.Close(); err != nil {
+			log.Printf("Warning: Error closing storage: %v", err)
+		}
+
+		log.Println("Shutdown complete")
+
+	case err := <-serverErr:
+		if err != nil {
+			log.Fatalf("Server error: %v", err)
+		}
 	}
 }

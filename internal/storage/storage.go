@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/adrg/xdg"
@@ -29,6 +30,17 @@ type Storage struct {
 	chunkEngine interface {
 		ChunkTurn(text string, turnID string) ([]models.Chunk, error)
 	}
+	mu sync.Mutex // Protects concurrent access to StoreTurn and block operations
+}
+
+// BridgeBlockInfo contains summary information about a Bridge Block
+type BridgeBlockInfo struct {
+	BlockID   string
+	Topic     string
+	Status    string
+	TurnCount int
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // NewStorage initializes storage with XDG-compliant paths
@@ -103,6 +115,11 @@ func (s *Storage) Close() error {
 	return nil
 }
 
+// GetVectorStorage returns the underlying VectorStorage instance
+func (s *Storage) GetVectorStorage() *VectorStorage {
+	return s.vectorStorage
+}
+
 // SetOpenAIClient sets the OpenAI client for embeddings
 func (s *Storage) SetOpenAIClient(client interface {
 	GenerateEmbedding(text string) ([]float64, error)
@@ -120,6 +137,10 @@ func (s *Storage) SetChunkEngine(engine interface {
 // StoreTurn stores a conversation turn and creates/updates a Bridge Block
 // INVARIANT: Only ONE block can be ACTIVE at a time. This is enforced by validation and maintained by this function.
 func (s *Storage) StoreTurn(turn *models.Turn) (string, error) {
+	// Lock to prevent concurrent modifications to active blocks (race condition fix)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	// For now, create a new Bridge Block for each turn (simplified routing)
 	// TODO: Implement full Governor routing logic (4 scenarios)
 

@@ -246,32 +246,36 @@ See `scenarios.jsonl` for documented test scenarios.
 ✅ **Phase 2: Core Components**
 - Governor with 4 routing scenarios
 - ChunkEngine for hierarchical chunking
-- ⏳ FactScrubber (basic implementation, needs LLM)
-- ⏳ ContextHydrator (pending)
+- FactScrubber with LLM-based extraction
+- ContextHydrator for intelligent prompt assembly
+- LatticeCrawler for vector-based candidate retrieval
 
-⏳ **Phase 3: Background Agents**
-- Scribe agent (pending)
+✅ **Phase 3: Background Agents**
+- Scribe agent for async user profile learning
+- Goroutine-based async processing
 
 ✅ **Phase 4: MCP Server**
 - Stdio transport
 - All 5 MCP tools implemented
 - .env loading for API keys
 
-⏳ **Phase 5: Advanced Features**
-- Vector embeddings with OpenAI
-- LLM-based fact extraction
-- Semantic memory search
-- Dynamic user profiles
+✅ **Phase 5: Advanced Features**
+- Vector embeddings with OpenAI (text-embedding-3-small)
+- LLM-based fact extraction (GPT-4o-mini)
+- Semantic memory search with cosine similarity
+- Dynamic user profiles with intelligent merging
 
 ## Roadmap
 
-- [ ] Integrate OpenAI embeddings (text-embedding-3-small)
-- [ ] Implement FactScrubber with LLM
-- [ ] Add vector-based semantic search
-- [ ] Implement Scribe agent for user profiles
-- [ ] Add ContextHydrator for prompt assembly
+- [x] Integrate OpenAI embeddings (text-embedding-3-small)
+- [x] Implement FactScrubber with LLM
+- [x] Add vector-based semantic search
+- [x] Implement Scribe agent for user profiles
+- [x] Add ContextHydrator for prompt assembly
+- [x] Implement LatticeCrawler for memory retrieval
+- [x] RAGAS benchmark tests (3/3 passing at 1.00)
 - [ ] Performance optimizations
-- [ ] RAGAS benchmark tests
+- [ ] Port remaining RAGAS tests (7C, 8, 9, 12)
 
 ## Contributing
 

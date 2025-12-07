@@ -27,8 +27,10 @@ func NewFactScrubber(client *llm.OpenAIClient) *FactScrubber {
 // ExtractAndSave extracts facts from a turn and saves them to storage
 // Links facts to the specified block_id and turn_id
 func (fs *FactScrubber) ExtractAndSave(turn *models.Turn, blockID string, store *storage.Storage) error {
-	// Combine user message and AI response for fact extraction
-	conversationText := fmt.Sprintf("User: %s\nAI: %s", turn.UserMessage, turn.AIResponse)
+	// Extract facts from USER MESSAGE ONLY
+	// This ensures we capture information the user provides, regardless of AI response quality
+	// User-provided facts (API keys, preferences, etc.) should be extracted even if AI gives generic response
+	conversationText := turn.UserMessage
 
 	// Extract facts using OpenAI client
 	facts, err := fs.client.ExtractFacts(conversationText)

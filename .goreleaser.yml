@@ -1,0 +1,130 @@
+# ABOUTME: GoReleaser configuration for Memory (HMLR)
+# ABOUTME: Builds multi-platform binaries with CGO support for SQLite
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+    - go test ./internal/...
+
+builds:
+  - id: memory
+    binary: memory
+    main: ./cmd/memory
+    env:
+      - CGO_ENABLED=1
+    # Build for macOS (both architectures) due to CGO requirements for SQLite
+    # Cross-compilation to Linux with CGO requires Docker or platform-specific builds
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+      - -X github.com/harper/remember-standalone/cmd/memory/commands.version={{.Version}}
+    tags:
+      - sqlite_omit_load_extension
+
+  - id: benchmark
+    binary: hmlr-benchmark
+    main: ./cmd/benchmark
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+    tags:
+      - sqlite_omit_load_extension
+
+archives:
+  - id: memory
+    builds: [memory, benchmark]
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files:
+      - README.md
+      - LICENSE*
+      - docs/**/*
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^chore:'
+      - 'merge conflict'
+      - Merge pull request
+      - Merge remote-tracking branch
+      - Merge branch
+  groups:
+    - title: 'Features'
+      regexp: "^.*feat[(\\w)]*:+.*$"
+      order: 0
+    - title: 'Bug fixes'
+      regexp: "^.*fix[(\\w)]*:+.*$"
+      order: 1
+    - title: 'Performance improvements'
+      regexp: "^.*perf[(\\w)]*:+.*$"
+      order: 2
+    - title: 'Other'
+      order: 999
+
+brews:
+  - ids: [memory]
+    repository:
+      owner: harperreed
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    homepage: https://github.com/harperreed/remember-standalone
+    description: "HMLR - Hierarchical Memory Lookup & Routing for LLM agents"
+    license: MIT
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    install: |
+      bin.install "memory"
+      bin.install "hmlr-benchmark"
+    test: |
+      system "#{bin}/memory", "--help"
+    caveats: |
+      Memory uses OpenAI for embeddings and LLM features.
+      Set OPENAI_API_KEY in your environment to enable full functionality.
+
+      To use with Claude Desktop, add to claude_desktop_config.json:
+      {
+        "mcpServers": {
+          "memory": {
+            "command": "memory",
+            "args": ["mcp"]
+          }
+        }
+      }

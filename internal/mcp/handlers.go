@@ -6,10 +6,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/harper/remember-standalone/internal/core"
+	"github.com/harper/remember-standalone/internal/llm"
 	"github.com/harper/remember-standalone/internal/models"
 	"github.com/harper/remember-standalone/internal/storage"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -17,10 +20,12 @@ import (
 
 // Handlers contains the handler functions for all MCP tools
 type Handlers struct {
-	storage     *storage.Storage
-	governor    *core.Governor
-	chunkEngine *core.ChunkEngine
-	scribe      *core.Scribe
+	storage      *storage.Storage
+	governor     *core.Governor
+	chunkEngine  *core.ChunkEngine
+	scribe       *core.Scribe
+	openaiClient *llm.OpenAIClient // For metadata extraction
+	shutdownWg   *sync.WaitGroup   // Track pending async operations
 }
 
 // StoreConversation handles the store_conversation tool
@@ -33,14 +38,33 @@ func (h *Handlers) StoreConversation(ctx context.Context, request mcp.CallToolRe
 
 	contextStr := request.GetString("context", "")
 
+	// Extract keywords and topics using LLM
+	var keywords, topics []string
+	if h.openaiClient != nil {
+		metadata, err := h.openaiClient.ExtractMetadata(message)
+		if err != nil {
+			log.Printf("Warning: metadata extraction failed: %v", err)
+			// Continue with empty arrays rather than failing the entire request
+			keywords = []string{}
+			topics = []string{}
+		} else {
+			keywords = extractStringArray(metadata, "keywords")
+			topics = extractStringArray(metadata, "topics")
+		}
+	} else {
+		// No LLM client available, use empty arrays
+		keywords = []string{}
+		topics = []string{}
+	}
+
 	// Create a turn
 	turn := &models.Turn{
 		TurnID:      fmt.Sprintf("turn_%s_%s", time.Now().Format("20060102_150405"), uuid.New().String()[:8]),
 		Timestamp:   time.Now(),
 		UserMessage: message,
 		AIResponse:  contextStr, // Using context as AI response for now
-		Keywords:    []string{}, // TODO: Extract keywords from message
-		Topics:      []string{}, // TODO: Extract topics from message
+		Keywords:    keywords,
+		Topics:      topics,
 	}
 
 	// Get routing decision from Governor
@@ -102,7 +126,7 @@ func (h *Handlers) StoreConversation(ctx context.Context, request mcp.CallToolRe
 		factsExtracted = len(facts)
 	}
 
-	// Trigger Scribe async to update user profile (fire-and-forget)
+	// Trigger Scribe async to update user profile (with goroutine tracking)
 	if h.scribe != nil {
 		profile, err := h.storage.GetUserProfile()
 		if err == nil {
@@ -115,8 +139,12 @@ func (h *Handlers) StoreConversation(ctx context.Context, request mcp.CallToolRe
 					LastUpdated:      time.Now(),
 				}
 			}
-			// Run Scribe async - don't wait for it
-			go h.scribe.UpdateProfileAsync(message, profile, h.storage)
+			// Run Scribe async - track goroutine for clean shutdown
+			h.shutdownWg.Add(1)
+			go func() {
+				defer h.shutdownWg.Done()
+				h.scribe.UpdateProfileAsync(message, profile, h.storage)
+			}()
 		}
 	}
 
@@ -283,4 +311,27 @@ func (h *Handlers) GetUserProfile(ctx context.Context, request mcp.CallToolReque
 	}
 
 	return mcp.NewToolResultText(string(responseJSON)), nil
+}
+
+// Shutdown waits for all pending async Scribe operations to complete
+func (h *Handlers) Shutdown() {
+	log.Println("Waiting for pending Scribe operations to complete...")
+	h.shutdownWg.Wait()
+	log.Println("All Scribe operations completed")
+}
+
+// extractStringArray extracts a string array from metadata map
+func extractStringArray(metadata map[string]interface{}, key string) []string {
+	if val, ok := metadata[key]; ok {
+		if arr, ok := val.([]interface{}); ok {
+			result := make([]string, 0, len(arr))
+			for _, item := range arr {
+				if str, ok := item.(string); ok {
+					result = append(result, str)
+				}
+			}
+			return result
+		}
+	}
+	return []string{}
 }

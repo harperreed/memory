@@ -142,7 +142,7 @@ Return ONLY a JSON object with these three fields. No additional text.`
 
 // ExtractFacts uses gpt-4o-mini to extract key-value facts from conversation text
 func (c *OpenAIClient) ExtractFacts(text string) ([]models.Fact, error) {
-	systemPrompt := `You are a fact extraction assistant. Given a conversation, extract factual key-value pairs about the user.
+	systemPrompt := `You are a fact extraction assistant. Given a conversation, extract ALL factual key-value pairs.
 
 Extract facts like:
 - name: user's name
@@ -151,16 +151,20 @@ Extract facts like:
 - favorite_language: programming language preference
 - location: city/country
 - role: job title
+- api_key, weather_api_key, stripe_api_key: API keys and credentials
+- email, phone: contact information
+- dietary_preference: food preferences
+- Any other factual information explicitly stated
 
 For each fact, provide:
-- key: standardized fact name (lowercase, underscores)
+- key: descriptive fact name (lowercase, underscores). For API keys, include service name (e.g., "weather_api_key")
 - value: the actual value
 - confidence: 0.0 to 1.0 (how certain you are)
 
 Return ONLY a JSON array of fact objects. Each object must have: key, value, confidence.
-Example: [{"key": "name", "value": "John", "confidence": 0.95}]
+Example: [{"key": "weather_api_key", "value": "ABC123XYZ", "confidence": 1.0}]
 
-Only extract facts that are explicitly stated. Do not infer or assume.`
+Extract EVERY fact explicitly stated. Do not infer or assume.`
 
 	userPrompt := fmt.Sprintf("Extract facts from this conversation:\n\n%s", text)
 

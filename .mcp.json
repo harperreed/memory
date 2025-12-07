@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "memory": {
+      "type": "stdio",
+      "command": "main",
+      "args": [],
+      "env": {}
+    }
+  }
+}

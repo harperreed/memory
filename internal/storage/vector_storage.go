@@ -14,6 +14,13 @@ import (
 	"github.com/harper/remember-standalone/internal/models"
 )
 
+// Expected embedding dimension for OpenAI text-embedding-3-small
+const ExpectedEmbeddingDimension = 1536
+
+// SkipDimensionValidation can be set to true in tests to allow non-1536D vectors
+// This is useful for unit tests that use smaller vectors for readability
+var SkipDimensionValidation = false
+
 // VectorStorage manages embedding storage and similarity search
 type VectorStorage struct {
 	basePath string
@@ -33,6 +40,11 @@ func NewVectorStorage(basePath string) (*VectorStorage, error) {
 
 // SaveEmbedding saves an embedding vector to disk
 func (vs *VectorStorage) SaveEmbedding(chunkID, turnID, blockID string, vector []float64) error {
+	// Validate embedding dimension (skip in tests for smaller test vectors)
+	if !SkipDimensionValidation && len(vector) != ExpectedEmbeddingDimension {
+		return fmt.Errorf("invalid embedding dimension: expected %d, got %d", ExpectedEmbeddingDimension, len(vector))
+	}
+
 	embedding := models.Embedding{
 		ChunkID:   chunkID,
 		TurnID:    turnID,

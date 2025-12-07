@@ -3,20 +3,25 @@
 package mcp
 
 import (
+	"sync"
+
 	"github.com/harper/remember-standalone/internal/core"
+	"github.com/harper/remember-standalone/internal/llm"
 	"github.com/harper/remember-standalone/internal/storage"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 )
 
 // RegisterTools registers all MCP tools with the server
-func RegisterTools(server *mcpserver.MCPServer, store *storage.Storage, governor *core.Governor, chunkEngine *core.ChunkEngine, scribe *core.Scribe) {
+func RegisterTools(server *mcpserver.MCPServer, store *storage.Storage, governor *core.Governor, chunkEngine *core.ChunkEngine, scribe *core.Scribe, openaiClient *llm.OpenAIClient) *Handlers {
 	// Initialize handlers
 	handlers := &Handlers{
-		storage:     store,
-		governor:    governor,
-		chunkEngine: chunkEngine,
-		scribe:      scribe,
+		storage:      store,
+		governor:     governor,
+		chunkEngine:  chunkEngine,
+		scribe:       scribe,
+		openaiClient: openaiClient,
+		shutdownWg:   &sync.WaitGroup{},
 	}
 
 	// 1. store_conversation - Store a conversation turn in HMLR memory system
@@ -95,4 +100,6 @@ func RegisterTools(server *mcpserver.MCPServer, store *storage.Storage, governor
 			Properties: map[string]interface{}{},
 		},
 	}, handlers.GetUserProfile)
+
+	return handlers
 }

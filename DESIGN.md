@@ -317,11 +317,11 @@ require (
 - [ ] SQLite facts database setup
 
 ### Phase 2: Core Components
-- [ ] ChunkEngine (hierarchical chunking)
-- [ ] Governor (routing logic + 4 scenarios)
-- [ ] FactScrubber (fact extraction)
-- [ ] ContextHydrator (prompt assembly)
-- [ ] LatticeCrawler (vector search)
+- [x] ChunkEngine (hierarchical chunking)
+- [x] Governor (routing logic + 4 scenarios)
+- [x] FactScrubber (fact extraction)
+- [x] ContextHydrator (prompt assembly)
+- [x] LatticeCrawler (vector search)
 
 ### Phase 3: Background Agents
 - [ ] Scribe agent (user profile updates)

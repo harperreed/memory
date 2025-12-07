@@ -8,6 +8,10 @@ import (
 )
 
 func TestVectorStorage_SaveAndSearch(t *testing.T) {
+	// Allow small test vectors (not 1536D)
+	SkipDimensionValidation = true
+	defer func() { SkipDimensionValidation = false }()
+
 	// Setup temp directory
 	tmpDir := t.TempDir()
 
@@ -135,6 +139,10 @@ func TestVectorStorage_EmptySearch(t *testing.T) {
 }
 
 func TestVectorStorage_FileFormat(t *testing.T) {
+	// Allow small test vectors (not 1536D)
+	SkipDimensionValidation = true
+	defer func() { SkipDimensionValidation = false }()
+
 	tmpDir := t.TempDir()
 	vs, err := NewVectorStorage(tmpDir)
 	if err != nil {
