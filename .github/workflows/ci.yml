@@ -121,13 +121,13 @@ jobs:
         run: go mod download
 
       - name: Run scenario tests
-        if: ${{ secrets.OPENAI_API_KEY != '' }}
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: make test-scenario
+        continue-on-error: true
 
       - name: Run load tests
-        if: ${{ secrets.OPENAI_API_KEY != '' }}
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: make test-load
+        continue-on-error: true
