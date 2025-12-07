@@ -38,6 +38,7 @@ Example `.env`:
 ```bash
 OPENAI_API_KEY=sk-proj-...
 ANTHROPIC_API_KEY=sk-ant-...  # Optional, for future features
+MEMORY_OPENAI_MODEL=gpt-5-mini  # Optional, defaults to gpt-5-mini
 ```
 
 3. **Build the server:**
@@ -52,6 +53,25 @@ go build -o bin/hmlr-server ./cmd/server
 
 The server will start on stdio and wait for MCP protocol messages.
 
+## Configuration
+
+### Environment Variables
+
+**Required:**
+- `OPENAI_API_KEY` - Your OpenAI API key for embeddings and LLM features
+
+**Optional:**
+- `MEMORY_OPENAI_MODEL` - Chat model to use (default: `gpt-5-mini`)
+  - Options: `gpt-5-mini`, `gpt-5-nano`, `gpt-5`, `gpt-4o-mini`, etc.
+  - Affects metadata extraction, fact extraction, and user profile learning
+  - GPT-5-mini is recommended for best balance of speed and quality
+  - GPT-5-nano for fastest/cheapest option
+
+**Model Selection Guide:**
+- `gpt-5-nano`: Fastest, lowest cost (~$0.05/1M input tokens)
+- `gpt-5-mini`: **Recommended** - Good balance (~$0.25/1M input tokens)
+- `gpt-5`: Highest quality, slower, more expensive
+
 ## Usage with Claude Code
 
 Add to your Claude Code MCP settings (`~/.config/claude-code/mcp_settings.json`):
@@ -63,7 +83,8 @@ Add to your Claude Code MCP settings (`~/.config/claude-code/mcp_settings.json`)
       "command": "/path/to/remember-standalone/bin/hmlr-server",
       "args": [],
       "env": {
-        "OPENAI_API_KEY": "your-key-here"
+        "OPENAI_API_KEY": "your-key-here",
+        "MEMORY_OPENAI_MODEL": "gpt-5-mini"
       }
     }
   }

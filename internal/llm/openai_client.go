@@ -1,36 +1,78 @@
 // ABOUTME: OpenAI client for embeddings and LLM-based extraction
-// ABOUTME: Uses text-embedding-3-small for embeddings, gpt-4o-mini for structured extraction
+// ABOUTME: Uses text-embedding-3-small for embeddings, gpt-5-mini for structured extraction (configurable)
 package llm
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/harper/remember-standalone/internal/models"
 	openai "github.com/sashabaranov/go-openai"
 )
 
-// OpenAIClient wraps the OpenAI API client with retry logic
-type OpenAIClient struct {
-	client     *openai.Client
-	maxRetries int
-	retryDelay time.Duration
+const (
+	// DefaultChatModel is the default model for chat completions
+	DefaultChatModel = "gpt-5-mini"
+	// DefaultEmbeddingModel is the default model for embeddings
+	DefaultEmbeddingModel = openai.SmallEmbedding3
+)
+
+// ClientConfig holds configuration for the OpenAI client
+type ClientConfig struct {
+	APIKey         string
+	ChatModel      string
+	EmbeddingModel openai.EmbeddingModel
+	MaxRetries     int
+	RetryDelay     time.Duration
 }
 
-// NewOpenAIClient creates a new OpenAI client with the given API key
+// DefaultConfig returns the default client configuration
+func DefaultConfig(apiKey string) *ClientConfig {
+	chatModel := os.Getenv("MEMORY_OPENAI_MODEL")
+	if chatModel == "" {
+		chatModel = DefaultChatModel
+	}
+
+	return &ClientConfig{
+		APIKey:         apiKey,
+		ChatModel:      chatModel,
+		EmbeddingModel: DefaultEmbeddingModel,
+		MaxRetries:     3,
+		RetryDelay:     time.Second * 2,
+	}
+}
+
+// OpenAIClient wraps the OpenAI API client with retry logic
+type OpenAIClient struct {
+	client         *openai.Client
+	chatModel      string
+	embeddingModel openai.EmbeddingModel
+	maxRetries     int
+	retryDelay     time.Duration
+}
+
+// NewOpenAIClient creates a new OpenAI client with the given API key using default configuration
 func NewOpenAIClient(apiKey string) (*OpenAIClient, error) {
-	if apiKey == "" {
+	return NewOpenAIClientWithConfig(DefaultConfig(apiKey))
+}
+
+// NewOpenAIClientWithConfig creates a new OpenAI client with custom configuration
+func NewOpenAIClientWithConfig(config *ClientConfig) (*OpenAIClient, error) {
+	if config.APIKey == "" {
 		return nil, fmt.Errorf("OpenAI API key is required")
 	}
 
-	client := openai.NewClient(apiKey)
+	client := openai.NewClient(config.APIKey)
 
 	return &OpenAIClient{
-		client:     client,
-		maxRetries: 3,
-		retryDelay: time.Second * 2,
+		client:         client,
+		chatModel:      config.ChatModel,
+		embeddingModel: config.EmbeddingModel,
+		maxRetries:     config.MaxRetries,
+		retryDelay:     config.RetryDelay,
 	}, nil
 }
 
@@ -53,7 +95,7 @@ func (c *OpenAIClient) GenerateEmbedding(text string) ([]float64, error) {
 
 		resp, err := c.client.CreateEmbeddings(ctx, openai.EmbeddingRequestStrings{
 			Input: []string{text},
-			Model: openai.SmallEmbedding3,
+			Model: c.embeddingModel,
 		})
 
 		if err != nil {
@@ -101,7 +143,7 @@ Return ONLY a JSON object with these three fields. No additional text.`
 		defer cancel()
 
 		resp, err := c.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
-			Model: openai.GPT4oMini,
+			Model: c.chatModel,
 			Messages: []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleSystem,
@@ -179,7 +221,7 @@ Extract EVERY fact explicitly stated. Do not infer or assume.`
 		defer cancel()
 
 		resp, err := c.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
-			Model: openai.GPT4oMini,
+			Model: c.chatModel,
 			Messages: []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleSystem,

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +20,7 @@ import (
 // Scribe is an async background agent that learns about the user from conversations
 type Scribe struct {
 	client     *openai.Client
+	chatModel  string
 	maxRetries int
 	retryDelay time.Duration
 	mu         sync.Mutex // Protects concurrent profile updates
@@ -44,8 +46,15 @@ func NewScribe(client interface{}) *Scribe {
 		oaiClient = client.(*openai.Client)
 	}
 
+	// Get chat model from env or use default
+	chatModel := os.Getenv("MEMORY_OPENAI_MODEL")
+	if chatModel == "" {
+		chatModel = "gpt-5-mini"
+	}
+
 	return &Scribe{
 		client:     oaiClient,
+		chatModel:  chatModel,
 		maxRetries: 3,
 		retryDelay: time.Second * 2,
 	}
@@ -129,7 +138,7 @@ If nothing is found, return an empty object: {}`
 		defer cancel()
 
 		resp, err := s.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
-			Model: openai.GPT4oMini,
+			Model: s.chatModel,
 			Messages: []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleSystem,
