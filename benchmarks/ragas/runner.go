@@ -329,9 +329,7 @@ func (r *BenchmarkRunner) retrieveContext(query string, currentBlockID string) (
 	// Get user profile
 	profile, err := r.storage.GetUserProfile()
 	if err == nil && profile != nil {
-		for _, pref := range profile.Preferences {
-			contextItems = append(contextItems, pref)
-		}
+		contextItems = append(contextItems, profile.Preferences...)
 	}
 
 	return contextItems, nil

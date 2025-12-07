@@ -117,5 +117,5 @@ func (g *Governor) matchesTopic(turn *models.Turn, block *models.BridgeBlock) bo
 
 // keywordMatch checks if two keywords match (case-insensitive)
 func (g *Governor) keywordMatch(k1, k2 string) bool {
-	return strings.ToLower(k1) == strings.ToLower(k2)
+	return strings.EqualFold(k1, k2)
 }
