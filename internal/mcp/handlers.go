@@ -1,5 +1,5 @@
 // ABOUTME: MCP tool handler implementations for HMLR server
-// ABOUTME: Contains stub implementations with proper error handling for all 5 tools
+// ABOUTME: Contains handler implementations with proper error handling for all 6 tools
 package mcp
 
 import (
@@ -297,6 +297,76 @@ func (h *Handlers) GetUserProfile(ctx context.Context, request mcp.CallToolReque
 
 	// Build response
 	response := map[string]interface{}{
+		"profile": map[string]interface{}{
+			"name":               profile.Name,
+			"preferences":        profile.Preferences,
+			"topics_of_interest": profile.TopicsOfInterest,
+			"last_updated":       profile.LastUpdated.Format(time.RFC3339),
+		},
+	}
+
+	responseJSON, err := json.Marshal(response)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to marshal response: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(string(responseJSON)), nil
+}
+
+// UpdateUserProfile handles the update_user_profile tool
+func (h *Handlers) UpdateUserProfile(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Load existing profile or create new one
+	profile, err := h.storage.GetUserProfile()
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to load profile: %v", err)), nil
+	}
+
+	if profile == nil {
+		profile = &models.UserProfile{
+			Name:             "",
+			Preferences:      []string{},
+			TopicsOfInterest: []string{},
+			LastUpdated:      time.Now(),
+		}
+	}
+
+	// Build update map from request arguments
+	updateInfo := make(map[string]interface{})
+
+	// Get name if provided
+	if name := request.GetString("name", ""); name != "" {
+		updateInfo["name"] = name
+	}
+
+	// Type assert Arguments to map for array access
+	args, ok := request.Params.Arguments.(map[string]any)
+	if ok {
+		// Get preferences if provided
+		if prefsRaw, exists := args["preferences"]; exists {
+			if prefsArray, ok := prefsRaw.([]interface{}); ok {
+				updateInfo["preferences"] = prefsArray
+			}
+		}
+
+		// Get topics_of_interest if provided
+		if topicsRaw, exists := args["topics_of_interest"]; exists {
+			if topicsArray, ok := topicsRaw.([]interface{}); ok {
+				updateInfo["topics_of_interest"] = topicsArray
+			}
+		}
+	}
+
+	// Merge updates into profile
+	profile.Merge(updateInfo)
+
+	// Save updated profile
+	if err := h.storage.SaveUserProfile(profile); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to save profile: %v", err)), nil
+	}
+
+	// Build response
+	response := map[string]interface{}{
+		"success": true,
 		"profile": map[string]interface{}{
 			"name":               profile.Name,
 			"preferences":        profile.Preferences,

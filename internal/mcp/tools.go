@@ -101,5 +101,30 @@ func RegisterTools(server *mcpserver.MCPServer, store *storage.Storage, governor
 		},
 	}, handlers.GetUserProfile)
 
+	// 6. update_user_profile - Update user profile preferences directly
+	server.AddTool(mcp.Tool{
+		Name:        "update_user_profile",
+		Description: "Update user profile with name, preferences, or topics of interest. All fields are optional - only provided fields will be updated.",
+		InputSchema: mcp.ToolInputSchema{
+			Type: "object",
+			Properties: map[string]interface{}{
+				"name": map[string]interface{}{
+					"type":        "string",
+					"description": "User's name",
+				},
+				"preferences": map[string]interface{}{
+					"type":        "array",
+					"items":       map[string]interface{}{"type": "string"},
+					"description": "User preferences to add (e.g., 'prefers dark mode', 'uses vim keybindings')",
+				},
+				"topics_of_interest": map[string]interface{}{
+					"type":        "array",
+					"items":       map[string]interface{}{"type": "string"},
+					"description": "Topics the user is interested in (e.g., 'Go programming', 'distributed systems')",
+				},
+			},
+		},
+	}, handlers.UpdateUserProfile)
+
 	return handlers
 }
