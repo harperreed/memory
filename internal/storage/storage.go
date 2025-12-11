@@ -646,3 +646,92 @@ func (s *Storage) GetUserProfile() (*models.UserProfile, error) {
 func (s *Storage) SaveUserProfile(profile *models.UserProfile) error {
 	return profile.Save()
 }
+
+// GetFactByKey retrieves a fact by its key (returns most recent if multiple exist)
+func (s *Storage) GetFactByKey(key string) (*models.Fact, error) {
+	row := s.db.QueryRow(`
+		SELECT fact_id, block_id, turn_id, key, value, confidence, created_at
+		FROM facts
+		WHERE key = ?
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, key)
+
+	var fact models.Fact
+	err := row.Scan(
+		&fact.FactID,
+		&fact.BlockID,
+		&fact.TurnID,
+		&fact.Key,
+		&fact.Value,
+		&fact.Confidence,
+		&fact.CreatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil // Not found, return nil without error
+		}
+		return nil, fmt.Errorf("failed to get fact: %w", err)
+	}
+
+	return &fact, nil
+}
+
+// DeleteFactByKey deletes all facts with the given key
+func (s *Storage) DeleteFactByKey(key string) (int64, error) {
+	result, err := s.db.Exec(`DELETE FROM facts WHERE key = ?`, key)
+	if err != nil {
+		return 0, fmt.Errorf("failed to delete fact: %w", err)
+	}
+	return result.RowsAffected()
+}
+
+// DeleteFactByID deletes a specific fact by its ID
+func (s *Storage) DeleteFactByID(factID string) error {
+	_, err := s.db.Exec(`DELETE FROM facts WHERE fact_id = ?`, factID)
+	if err != nil {
+		return fmt.Errorf("failed to delete fact: %w", err)
+	}
+	return nil
+}
+
+// SaveFact saves a single fact to the database (for direct fact insertion)
+func (s *Storage) SaveFact(fact *models.Fact) error {
+	_, err := s.db.Exec(`
+		INSERT INTO facts (fact_id, block_id, turn_id, key, value, confidence, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
+	`, fact.FactID, fact.BlockID, fact.TurnID, fact.Key, fact.Value, fact.Confidence, fact.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("failed to insert fact: %w", err)
+	}
+	return nil
+}
+
+// DeleteBridgeBlock deletes a bridge block and all its associated data
+func (s *Storage) DeleteBridgeBlock(blockID string) error {
+	// Delete associated facts first
+	_, err := s.db.Exec(`DELETE FROM facts WHERE block_id = ?`, blockID)
+	if err != nil {
+		return fmt.Errorf("failed to delete block facts: %w", err)
+	}
+
+	// Delete associated embeddings
+	_, err = s.db.Exec(`DELETE FROM embeddings WHERE block_id = ?`, blockID)
+	if err != nil {
+		return fmt.Errorf("failed to delete block embeddings: %w", err)
+	}
+
+	// Get block to find file path
+	block, err := s.GetBridgeBlock(blockID)
+	if err != nil {
+		return fmt.Errorf("failed to get block for deletion: %w", err)
+	}
+
+	// Delete the JSON file
+	blockFile := filepath.Join(s.basePath, "bridge_blocks", block.CreatedAt.Format("2006-01-02"), blockID+".json")
+	if err := os.Remove(blockFile); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to delete block file: %w", err)
+	}
+
+	return nil
+}

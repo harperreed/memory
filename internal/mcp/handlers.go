@@ -1,5 +1,5 @@
 // ABOUTME: MCP tool handler implementations for HMLR server
-// ABOUTME: Contains handler implementations with proper error handling for all 6 tools
+// ABOUTME: Contains handler implementations with proper error handling for all 11 tools
 package mcp
 
 import (
@@ -373,6 +373,178 @@ func (h *Handlers) UpdateUserProfile(ctx context.Context, request mcp.CallToolRe
 			"topics_of_interest": profile.TopicsOfInterest,
 			"last_updated":       profile.LastUpdated.Format(time.RFC3339),
 		},
+	}
+
+	responseJSON, err := json.Marshal(response)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to marshal response: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(string(responseJSON)), nil
+}
+
+// AddFact handles the add_fact tool
+func (h *Handlers) AddFact(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Extract arguments
+	key, err := request.RequireString("key")
+	if err != nil {
+		return mcp.NewToolResultError("key argument is required and must be a string"), nil
+	}
+
+	value, err := request.RequireString("value")
+	if err != nil {
+		return mcp.NewToolResultError("value argument is required and must be a string"), nil
+	}
+
+	confidence := request.GetFloat("confidence", 1.0)
+
+	// Create fact
+	fact := &models.Fact{
+		FactID:     fmt.Sprintf("fact_%s_%s", time.Now().Format("20060102_150405"), uuid.New().String()[:8]),
+		BlockID:    "direct_input", // Special block ID for directly added facts
+		TurnID:     "direct_input",
+		Key:        key,
+		Value:      value,
+		Confidence: confidence,
+		CreatedAt:  time.Now(),
+	}
+
+	// Save fact
+	if err := h.storage.SaveFact(fact); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to save fact: %v", err)), nil
+	}
+
+	// Build response
+	response := map[string]interface{}{
+		"success": true,
+		"fact_id": fact.FactID,
+		"key":     fact.Key,
+		"value":   fact.Value,
+	}
+
+	responseJSON, err := json.Marshal(response)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to marshal response: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(string(responseJSON)), nil
+}
+
+// GetFact handles the get_fact tool
+func (h *Handlers) GetFact(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Extract arguments
+	key, err := request.RequireString("key")
+	if err != nil {
+		return mcp.NewToolResultError("key argument is required and must be a string"), nil
+	}
+
+	// Look up fact
+	fact, err := h.storage.GetFactByKey(key)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to get fact: %v", err)), nil
+	}
+
+	// Build response
+	var response map[string]interface{}
+	if fact == nil {
+		response = map[string]interface{}{
+			"found": false,
+			"key":   key,
+		}
+	} else {
+		response = map[string]interface{}{
+			"found":      true,
+			"fact_id":    fact.FactID,
+			"key":        fact.Key,
+			"value":      fact.Value,
+			"confidence": fact.Confidence,
+			"created_at": fact.CreatedAt.Format(time.RFC3339),
+		}
+	}
+
+	responseJSON, err := json.Marshal(response)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to marshal response: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(string(responseJSON)), nil
+}
+
+// DeleteFact handles the delete_fact tool
+func (h *Handlers) DeleteFact(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Extract arguments
+	key, err := request.RequireString("key")
+	if err != nil {
+		return mcp.NewToolResultError("key argument is required and must be a string"), nil
+	}
+
+	// Delete fact
+	deleted, err := h.storage.DeleteFactByKey(key)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to delete fact: %v", err)), nil
+	}
+
+	// Build response
+	response := map[string]interface{}{
+		"success":       true,
+		"key":           key,
+		"deleted_count": deleted,
+	}
+
+	responseJSON, err := json.Marshal(response)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to marshal response: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(string(responseJSON)), nil
+}
+
+// ArchiveTopic handles the archive_topic tool
+func (h *Handlers) ArchiveTopic(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Extract arguments
+	blockID, err := request.RequireString("block_id")
+	if err != nil {
+		return mcp.NewToolResultError("block_id argument is required and must be a string"), nil
+	}
+
+	// Update status to archived
+	if err := h.storage.UpdateBridgeBlockStatus(blockID, models.StatusArchived); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to archive topic: %v", err)), nil
+	}
+
+	// Build response
+	response := map[string]interface{}{
+		"success":  true,
+		"block_id": blockID,
+		"status":   "archived",
+	}
+
+	responseJSON, err := json.Marshal(response)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to marshal response: %v", err)), nil
+	}
+
+	return mcp.NewToolResultText(string(responseJSON)), nil
+}
+
+// DeleteTopic handles the delete_topic tool
+func (h *Handlers) DeleteTopic(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	// Extract arguments
+	blockID, err := request.RequireString("block_id")
+	if err != nil {
+		return mcp.NewToolResultError("block_id argument is required and must be a string"), nil
+	}
+
+	// Delete the block and all associated data
+	if err := h.storage.DeleteBridgeBlock(blockID); err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("failed to delete topic: %v", err)), nil
+	}
+
+	// Build response
+	response := map[string]interface{}{
+		"success":  true,
+		"block_id": blockID,
+		"deleted":  true,
 	}
 
 	responseJSON, err := json.Marshal(response)

@@ -8,9 +8,10 @@ import "time"
 type BridgeBlockStatus string
 
 const (
-	StatusActive BridgeBlockStatus = "ACTIVE"
-	StatusPaused BridgeBlockStatus = "PAUSED"
-	StatusClosed BridgeBlockStatus = "CLOSED"
+	StatusActive   BridgeBlockStatus = "ACTIVE"
+	StatusPaused   BridgeBlockStatus = "PAUSED"
+	StatusClosed   BridgeBlockStatus = "CLOSED"
+	StatusArchived BridgeBlockStatus = "ARCHIVED"
 )
 
 // BridgeBlock represents a topic-based conversation thread

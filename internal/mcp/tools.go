@@ -1,5 +1,5 @@
 // ABOUTME: MCP tool definitions and registration for HMLR server
-// ABOUTME: Defines JSON schemas for all 5 MCP tools following DESIGN.md spec
+// ABOUTME: Defines JSON schemas for all 11 MCP tools following DESIGN.md spec
 package mcp
 
 import (
@@ -125,6 +125,95 @@ func RegisterTools(server *mcpserver.MCPServer, store *storage.Storage, governor
 			},
 		},
 	}, handlers.UpdateUserProfile)
+
+	// 7. add_fact - Directly add a key-value fact
+	server.AddTool(mcp.Tool{
+		Name:        "add_fact",
+		Description: "Directly add a key-value fact to memory without storing a conversation. Useful for storing API keys, settings, or explicit user data.",
+		InputSchema: mcp.ToolInputSchema{
+			Type: "object",
+			Properties: map[string]interface{}{
+				"key": map[string]interface{}{
+					"type":        "string",
+					"description": "Fact key (e.g., 'weather_api_key', 'preferred_language', 'user_timezone')",
+				},
+				"value": map[string]interface{}{
+					"type":        "string",
+					"description": "Fact value",
+				},
+				"confidence": map[string]interface{}{
+					"type":        "number",
+					"description": "Confidence score 0.0-1.0 (default: 1.0)",
+					"default":     1.0,
+				},
+			},
+			Required: []string{"key", "value"},
+		},
+	}, handlers.AddFact)
+
+	// 8. get_fact - Look up a specific fact by key
+	server.AddTool(mcp.Tool{
+		Name:        "get_fact",
+		Description: "Look up a specific fact by its key. Returns the most recent value if multiple exist.",
+		InputSchema: mcp.ToolInputSchema{
+			Type: "object",
+			Properties: map[string]interface{}{
+				"key": map[string]interface{}{
+					"type":        "string",
+					"description": "Fact key to look up",
+				},
+			},
+			Required: []string{"key"},
+		},
+	}, handlers.GetFact)
+
+	// 9. delete_fact - Remove a fact by key
+	server.AddTool(mcp.Tool{
+		Name:        "delete_fact",
+		Description: "Delete a fact by its key. Removes all facts with the given key.",
+		InputSchema: mcp.ToolInputSchema{
+			Type: "object",
+			Properties: map[string]interface{}{
+				"key": map[string]interface{}{
+					"type":        "string",
+					"description": "Fact key to delete",
+				},
+			},
+			Required: []string{"key"},
+		},
+	}, handlers.DeleteFact)
+
+	// 10. archive_topic - Mark a topic as archived/completed
+	server.AddTool(mcp.Tool{
+		Name:        "archive_topic",
+		Description: "Mark a topic (Bridge Block) as archived/completed. The topic will no longer appear in active topics but its data is preserved.",
+		InputSchema: mcp.ToolInputSchema{
+			Type: "object",
+			Properties: map[string]interface{}{
+				"block_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Bridge Block ID to archive",
+				},
+			},
+			Required: []string{"block_id"},
+		},
+	}, handlers.ArchiveTopic)
+
+	// 11. delete_topic - Permanently delete a topic
+	server.AddTool(mcp.Tool{
+		Name:        "delete_topic",
+		Description: "Permanently delete a topic (Bridge Block) and all its associated data including facts and embeddings. This action cannot be undone.",
+		InputSchema: mcp.ToolInputSchema{
+			Type: "object",
+			Properties: map[string]interface{}{
+				"block_id": map[string]interface{}{
+					"type":        "string",
+					"description": "Bridge Block ID to delete",
+				},
+			},
+			Required: []string{"block_id"},
+		},
+	}, handlers.DeleteTopic)
 
 	return handlers
 }
