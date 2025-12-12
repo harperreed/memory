@@ -19,6 +19,10 @@ builds:
     goarch:
       - amd64
       - arm64
+    # Skip linux/arm64 - cross-compilation issues with CGO
+    ignore:
+      - goos: linux
+        goarch: arm64
     ldflags:
       - -s -w
       - -X main.version={{.Version}}
@@ -39,6 +43,10 @@ builds:
     goarch:
       - amd64
       - arm64
+    # Skip linux/arm64 - cross-compilation issues with CGO
+    ignore:
+      - goos: linux
+        goarch: arm64
     ldflags:
       - -s -w
       - -X main.version={{.Version}}
