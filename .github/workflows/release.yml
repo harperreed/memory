@@ -12,8 +12,8 @@ permissions:
   packages: write
 
 jobs:
-  release:
-    name: Release
+  release-linux:
+    name: Release Linux
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -21,13 +21,82 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Run GoReleaser with Cross-compilation
-        uses: docker://ghcr.io/goreleaser/goreleaser-cross:v1.23
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
+          go-version: '1.23'
+          cache: true
+
+      - name: Build Linux binaries
+        run: |
+          CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X main.version=${{ github.ref_name }} -X main.commit=${{ github.sha }}" -tags sqlite_omit_load_extension -o dist/memory-linux-amd64 ./cmd/memory
+          CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X main.version=${{ github.ref_name }} -X main.commit=${{ github.sha }}" -tags sqlite_omit_load_extension -o dist/hmlr-benchmark-linux-amd64 ./cmd/benchmark
+
+      - name: Create tarball
+        run: |
+          cd dist
+          tar -czvf memory_${{ github.ref_name }}_Linux_x86_64.tar.gz memory-linux-amd64 hmlr-benchmark-linux-amd64
+          sha256sum memory_${{ github.ref_name }}_Linux_x86_64.tar.gz > checksums-linux.txt
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-binaries
+          path: dist/*.tar.gz
+
+      - name: Upload Linux checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-checksums
+          path: dist/checksums-linux.txt
+
+  release-macos:
+    name: Release macOS
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache: true
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: latest
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+  upload-linux:
+    name: Upload Linux to Release
+    needs: [release-linux, release-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-binaries
+          path: dist
+
+      - name: Download Linux checksums
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-checksums
+          path: dist
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.tar.gz
+          append_body: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

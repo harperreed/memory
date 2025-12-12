@@ -13,16 +13,12 @@ builds:
     main: ./cmd/memory
     env:
       - CGO_ENABLED=1
+    # macOS only - Linux is built separately in GitHub Actions
     goos:
       - darwin
-      - linux
     goarch:
       - amd64
       - arm64
-    # Skip linux/arm64 - cross-compilation issues with CGO
-    ignore:
-      - goos: linux
-        goarch: arm64
     ldflags:
       - -s -w
       - -X main.version={{.Version}}
@@ -37,16 +33,12 @@ builds:
     main: ./cmd/benchmark
     env:
       - CGO_ENABLED=1
+    # macOS only - Linux is built separately in GitHub Actions
     goos:
       - darwin
-      - linux
     goarch:
       - amd64
       - arm64
-    # Skip linux/arm64 - cross-compilation issues with CGO
-    ignore:
-      - goos: linux
-        goarch: arm64
     ldflags:
       - -s -w
       - -X main.version={{.Version}}
