@@ -13,10 +13,9 @@ builds:
     main: ./cmd/memory
     env:
       - CGO_ENABLED=1
-    # Build for macOS (both architectures) due to CGO requirements for SQLite
-    # Cross-compilation to Linux with CGO requires Docker or platform-specific builds
     goos:
       - darwin
+      - linux
     goarch:
       - amd64
       - arm64
@@ -36,6 +35,7 @@ builds:
       - CGO_ENABLED=1
     goos:
       - darwin
+      - linux
     goarch:
       - amd64
       - arm64
