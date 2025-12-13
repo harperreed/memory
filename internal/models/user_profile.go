@@ -21,12 +21,12 @@ type UserProfile struct {
 
 // LoadUserProfile loads user profile from XDG data directory
 func LoadUserProfile() (*UserProfile, error) {
-	// Use XDG data directory: ~/.local/share/remember/user_profile.json
+	// Use XDG data directory: ~/.local/share/memory/user_profile.json
 	dataHome := os.Getenv("XDG_DATA_HOME")
 	if dataHome == "" {
 		dataHome = xdg.DataHome
 	}
-	profilePath := filepath.Join(dataHome, "remember", "user_profile.json")
+	profilePath := filepath.Join(dataHome, "memory", "user_profile.json")
 
 	data, err := os.ReadFile(profilePath)
 	if err != nil {
@@ -52,7 +52,7 @@ func (up *UserProfile) Save() error {
 	if dataHome == "" {
 		dataHome = xdg.DataHome
 	}
-	basePath := filepath.Join(dataHome, "remember")
+	basePath := filepath.Join(dataHome, "memory")
 
 	// Ensure directory exists
 	if err := os.MkdirAll(basePath, 0755); err != nil {

@@ -45,13 +45,13 @@ type BridgeBlockInfo struct {
 
 // NewStorage initializes storage with XDG-compliant paths
 func NewStorage() (*Storage, error) {
-	// Use XDG data directory: ~/.local/share/remember/
+	// Use XDG data directory: ~/.local/share/memory/
 	// Respects XDG_DATA_HOME environment variable override for testing
 	dataHome := os.Getenv("XDG_DATA_HOME")
 	if dataHome == "" {
 		dataHome = xdg.DataHome
 	}
-	basePath := filepath.Join(dataHome, "remember")
+	basePath := filepath.Join(dataHome, "memory")
 
 	// Create directory structure
 	dirs := []string{

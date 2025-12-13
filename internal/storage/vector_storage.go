@@ -1,5 +1,5 @@
 // ABOUTME: Vector storage with file-based JSON storage and cosine similarity search
-// ABOUTME: Stores embeddings in daily JSON files at ~/.local/share/remember/embeddings/
+// ABOUTME: Stores embeddings in daily JSON files at ~/.local/share/memory/embeddings/
 package storage
 
 import (
@@ -28,7 +28,7 @@ type VectorStorage struct {
 
 // NewVectorStorage creates a new VectorStorage instance
 func NewVectorStorage(basePath string) (*VectorStorage, error) {
-	embeddingsDir := filepath.Join(basePath, "remember", "embeddings")
+	embeddingsDir := filepath.Join(basePath, "memory", "embeddings")
 	if err := os.MkdirAll(embeddingsDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create embeddings directory: %w", err)
 	}
@@ -123,7 +123,7 @@ func (vs *VectorStorage) SearchSimilar(queryVector []float64, maxResults int) ([
 
 // getEmbeddingFilePath returns the file path for a given date
 func (vs *VectorStorage) getEmbeddingFilePath(date string) string {
-	return filepath.Join(vs.basePath, "remember", "embeddings", date+".json")
+	return filepath.Join(vs.basePath, "memory", "embeddings", date+".json")
 }
 
 // loadEmbeddingsFromFile loads embeddings from a JSON file

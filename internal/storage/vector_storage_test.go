@@ -161,7 +161,7 @@ func TestVectorStorage_FileFormat(t *testing.T) {
 
 	// The file should exist (in practice, we can't easily test the exact filename
 	// since it uses time.Now(), but we can verify the directory exists)
-	embeddingsDir := tmpDir + "/remember/embeddings"
+	embeddingsDir := tmpDir + "/memory/embeddings"
 	if _, err := os.Stat(embeddingsDir); os.IsNotExist(err) {
 		t.Errorf("Embeddings directory not created: %s", embeddingsDir)
 	}
