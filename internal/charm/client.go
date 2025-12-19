@@ -93,11 +93,12 @@ func ResetGlobalClient() {
 }
 
 // NewClient creates a new charm client with the given config
+// Automatically falls back to read-only mode if another process holds the lock.
 func NewClient(cfg *Config) (*Client, error) {
 	// Set CHARM_HOST before opening KV
 	os.Setenv("CHARM_HOST", cfg.Host)
 
-	db, err := kv.OpenWithDefaults(cfg.DBName)
+	db, err := kv.OpenWithDefaultsFallback(cfg.DBName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open charm kv: %w", err)
 	}
@@ -107,8 +108,8 @@ func NewClient(cfg *Config) (*Client, error) {
 		config: cfg,
 	}
 
-	// Pull remote data on startup
-	if cfg.AutoSync {
+	// Pull remote data on startup (skip in read-only mode)
+	if cfg.AutoSync && !db.IsReadOnly() {
 		_ = db.Sync()
 	}
 
@@ -125,9 +126,15 @@ func (c *Client) Close() error {
 	return nil
 }
 
-// syncIfEnabled syncs to cloud after writes
+// IsReadOnly returns true if the database is open in read-only mode.
+// This happens when another process (like an MCP server) holds the lock.
+func (c *Client) IsReadOnly() bool {
+	return c.kv.IsReadOnly()
+}
+
+// syncIfEnabled syncs to cloud after writes (skip in read-only mode)
 func (c *Client) syncIfEnabled() {
-	if c.config.AutoSync {
+	if c.config.AutoSync && !c.kv.IsReadOnly() {
 		_ = c.kv.Sync()
 	}
 }
@@ -145,6 +152,10 @@ func (c *Client) ID() (string, error) {
 func (c *Client) Set(key string, value []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	if c.kv.IsReadOnly() {
+		return fmt.Errorf("cannot write: database is locked by another process (MCP server?)")
+	}
 
 	if err := c.kv.Set([]byte(key), value); err != nil {
 		return fmt.Errorf("failed to set key %s: %w", key, err)
@@ -165,6 +176,10 @@ func (c *Client) Get(key string) ([]byte, error) {
 func (c *Client) Delete(key string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	if c.kv.IsReadOnly() {
+		return fmt.Errorf("cannot write: database is locked by another process (MCP server?)")
+	}
 
 	if err := c.kv.Delete([]byte(key)); err != nil {
 		return fmt.Errorf("failed to delete key %s: %w", key, err)
@@ -214,8 +229,11 @@ func (c *Client) ListKeys(prefix string) ([]string, error) {
 	return result, nil
 }
 
-// Sync manually triggers a sync with the cloud
+// Sync manually triggers a sync with the cloud (skip in read-only mode)
 func (c *Client) Sync() error {
+	if c.kv.IsReadOnly() {
+		return nil // Silently skip sync in read-only mode
+	}
 	return c.kv.Sync()
 }
 
