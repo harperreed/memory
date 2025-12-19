@@ -29,8 +29,8 @@ jobs:
 
       - name: Build Linux binaries
         run: |
-          CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X main.version=${{ github.ref_name }} -X main.commit=${{ github.sha }}" -tags sqlite_omit_load_extension -o dist/memory-linux-amd64 ./cmd/memory
-          CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X main.version=${{ github.ref_name }} -X main.commit=${{ github.sha }}" -tags sqlite_omit_load_extension -o dist/hmlr-benchmark-linux-amd64 ./cmd/benchmark
+          CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X main.version=${{ github.ref_name }} -X main.commit=${{ github.sha }}" -o dist/memory-linux-amd64 ./cmd/memory
+          CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X main.version=${{ github.ref_name }} -X main.commit=${{ github.sha }}" -o dist/hmlr-benchmark-linux-amd64 ./cmd/benchmark
 
       - name: Create tarball
         run: |

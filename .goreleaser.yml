@@ -1,5 +1,5 @@
 # ABOUTME: GoReleaser configuration for Memory (HMLR)
-# ABOUTME: Builds multi-platform binaries with CGO support for SQLite
+# ABOUTME: Builds multi-platform binaries with Charm KV cloud sync
 version: 2
 
 before:
@@ -25,8 +25,6 @@ builds:
       - -X main.commit={{.Commit}}
       - -X main.date={{.Date}}
       - -X github.com/harper/remember-standalone/cmd/memory/commands.version={{.Version}}
-    tags:
-      - sqlite_omit_load_extension
 
   - id: benchmark
     binary: hmlr-benchmark
@@ -44,8 +42,6 @@ builds:
       - -X main.version={{.Version}}
       - -X main.commit={{.Commit}}
       - -X main.date={{.Date}}
-    tags:
-      - sqlite_omit_load_extension
 
 archives:
   - id: memory

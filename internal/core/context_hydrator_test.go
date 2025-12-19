@@ -1,4 +1,4 @@
-// ABOUTME: Unit tests for ContextHydrator without requiring OpenAI API
+// ABOUTME: Integration tests for ContextHydrator requiring Charm server
 // ABOUTME: Tests prompt assembly structure and token limiting logic
 package core
 
@@ -13,11 +13,16 @@ import (
 	"github.com/harper/remember-standalone/internal/storage"
 )
 
+func skipIfNoCharm(t *testing.T) {
+	// Skip tests that require charm if CHARM_HOST is not configured
+	// These are integration tests that need a real charm server
+	if os.Getenv("CHARM_HOST") == "" {
+		t.Skip("Skipping: CHARM_HOST not configured (set to run integration tests)")
+	}
+}
+
 func TestContextHydrator_BasicPromptAssembly(t *testing.T) {
-	// Setup temporary storage
-	tmpDir := t.TempDir()
-	os.Setenv("XDG_DATA_HOME", tmpDir)
-	defer os.Unsetenv("XDG_DATA_HOME")
+	skipIfNoCharm(t)
 
 	store, err := storage.NewStorage()
 	if err != nil {
@@ -26,6 +31,7 @@ func TestContextHydrator_BasicPromptAssembly(t *testing.T) {
 	defer store.Close()
 
 	// Create a simple bridge block with conversation history
+	// Note: Tests use the configured charm server for storage
 	turn1 := &models.Turn{
 		TurnID:      "turn_" + uuid.New().String(),
 		Timestamp:   time.Now(),
@@ -137,10 +143,7 @@ func TestContextHydrator_BasicPromptAssembly(t *testing.T) {
 }
 
 func TestContextHydrator_MultiTurnHistory(t *testing.T) {
-	// Setup temporary storage
-	tmpDir := t.TempDir()
-	os.Setenv("XDG_DATA_HOME", tmpDir)
-	defer os.Unsetenv("XDG_DATA_HOME")
+	skipIfNoCharm(t)
 
 	store, err := storage.NewStorage()
 	if err != nil {
