@@ -2,10 +2,8 @@ module github.com/harper/remember-standalone
 
 go 1.24.11
 
-replace github.com/charmbracelet/charm => /Users/harper/Public/src/2389/charm
-
 require (
-	github.com/charmbracelet/charm v0.0.0-00010101000000-000000000000
+	github.com/charmbracelet/charm v0.13.2
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
 	github.com/mark3labs/mcp-go v0.43.2
@@ -64,3 +62,5 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.41.0 // indirect
 )
+
+replace github.com/charmbracelet/charm => github.com/2389-research/charm v0.0.0-20251220172505-c2ebc1f30d74
