@@ -63,4 +63,4 @@ require (
 	modernc.org/sqlite v1.41.0 // indirect
 )
 
-replace github.com/charmbracelet/charm => github.com/2389-research/charm v0.15.1
+replace github.com/charmbracelet/charm => github.com/2389-research/charm v0.15.3
