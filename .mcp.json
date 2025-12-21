@@ -2,8 +2,8 @@
   "mcpServers": {
     "memory": {
       "type": "stdio",
-      "command": "main",
-      "args": [],
+      "command": "memory",
+      "args": ["mcp"],
       "env": {}
     }
   }
