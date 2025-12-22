@@ -11,6 +11,11 @@ const (
 	ChunkTypeSentence  ChunkType = "SENTENCE"
 )
 
+// IsValid checks if the ChunkType is a valid value
+func (c ChunkType) IsValid() bool {
+	return c == ChunkTypeTurn || c == ChunkTypeParagraph || c == ChunkTypeSentence
+}
+
 // Chunk represents a hierarchical piece of text for embedding
 type Chunk struct {
 	ChunkID       string    `json:"chunk_id"`

@@ -109,13 +109,13 @@ func runProfileShow(cmd *cobra.Command, args []string) error {
 		if len(profile.Preferences) > 0 {
 			prefs = strings.Join(profile.Preferences, ", ")
 		}
-		fmt.Fprintf(w, "Preferences\t%s\n", truncateProfile(prefs, 60))
+		fmt.Fprintf(w, "Preferences\t%s\n", truncate(prefs, 60))
 
 		topics := "(none)"
 		if len(profile.TopicsOfInterest) > 0 {
 			topics = strings.Join(profile.TopicsOfInterest, ", ")
 		}
-		fmt.Fprintf(w, "Topics\t%s\n", truncateProfile(topics, 60))
+		fmt.Fprintf(w, "Topics\t%s\n", truncate(topics, 60))
 
 		fmt.Fprintf(w, "Last Updated\t%s\n", formatTime(profile.LastUpdated))
 
@@ -193,20 +193,4 @@ func runProfileSet(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
-}
-
-func truncateProfile(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
-}
-
-func containsString(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
 }

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -26,6 +27,7 @@ type Handlers struct {
 	scribe       *core.Scribe
 	openaiClient *llm.OpenAIClient // For metadata extraction
 	shutdownWg   *sync.WaitGroup   // Track pending async operations
+	shuttingDown atomic.Bool       // Prevents new goroutines during shutdown
 }
 
 // StoreConversation handles the store_conversation tool
@@ -127,9 +129,12 @@ func (h *Handlers) StoreConversation(ctx context.Context, request mcp.CallToolRe
 	}
 
 	// Trigger Scribe async to update user profile (with goroutine tracking)
-	if h.scribe != nil {
-		profile, err := h.storage.GetUserProfile()
-		if err == nil {
+	// Note: We check shuttingDown before Add(1) to prevent launching goroutines
+	// after Shutdown() has started waiting. The goroutine also checks the flag
+	// to bail out early if shutdown began after we passed the outer check.
+	if h.scribe != nil && !h.shuttingDown.Load() {
+		profile, profileErr := h.storage.GetUserProfile()
+		if profileErr == nil {
 			// If no profile exists, create empty one
 			if profile == nil {
 				profile = &models.UserProfile{
@@ -143,6 +148,10 @@ func (h *Handlers) StoreConversation(ctx context.Context, request mcp.CallToolRe
 			h.shutdownWg.Add(1)
 			go func() {
 				defer h.shutdownWg.Done()
+				// Early exit if shutdown started between Add(1) and here
+				if h.shuttingDown.Load() {
+					return
+				}
 				h.scribe.UpdateProfileAsync(message, profile, h.storage)
 			}()
 		}
@@ -398,15 +407,10 @@ func (h *Handlers) AddFact(ctx context.Context, request mcp.CallToolRequest) (*m
 
 	confidence := request.GetFloat("confidence", 1.0)
 
-	// Create fact
-	fact := &models.Fact{
-		FactID:     fmt.Sprintf("fact_%s_%s", time.Now().Format("20060102_150405"), uuid.New().String()[:8]),
-		BlockID:    "direct_input", // Special block ID for directly added facts
-		TurnID:     "direct_input",
-		Key:        key,
-		Value:      value,
-		Confidence: confidence,
-		CreatedAt:  time.Now(),
+	// Create fact using constructor with validation
+	fact, err := models.NewFact("direct_input", "direct_input", key, value, confidence)
+	if err != nil {
+		return mcp.NewToolResultError(fmt.Sprintf("invalid fact: %v", err)), nil
 	}
 
 	// Save fact
@@ -557,6 +561,7 @@ func (h *Handlers) DeleteTopic(ctx context.Context, request mcp.CallToolRequest)
 
 // Shutdown waits for all pending async Scribe operations to complete
 func (h *Handlers) Shutdown() {
+	h.shuttingDown.Store(true)
 	log.Println("Waiting for pending Scribe operations to complete...")
 	h.shutdownWg.Wait()
 	log.Println("All Scribe operations completed")

@@ -1,6 +1,8 @@
 module github.com/harper/remember-standalone
 
-go 1.24.11
+go 1.24.0
+
+toolchain go1.24.11
 
 require (
 	github.com/charmbracelet/charm v0.13.2

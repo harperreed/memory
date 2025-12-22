@@ -4,7 +4,7 @@ package storage
 
 import (
 	"fmt"
-	"os"
+	"log"
 	"sort"
 	"strings"
 	"sync"
@@ -25,7 +25,7 @@ type Storage struct {
 	chunkEngine interface {
 		ChunkTurn(text string, turnID string) ([]models.Chunk, error)
 	}
-	mu sync.Mutex // Protects concurrent access to StoreTurn and block operations
+	mu sync.RWMutex // Protects concurrent access to StoreTurn and block operations
 }
 
 // BridgeBlockInfo contains summary information about a Bridge Block
@@ -93,7 +93,7 @@ func (s *Storage) StoreTurn(turn *models.Turn) (string, error) {
 	defer s.mu.Unlock()
 
 	// Get active blocks and auto-repair if invariant violated
-	activeBlocks, err := s.GetActiveBridgeBlocks()
+	activeBlocks, err := s.getBridgeBlocksByStatusUnlocked(models.StatusActive)
 	if err != nil {
 		return "", fmt.Errorf("failed to check active blocks: %w", err)
 	}
@@ -112,13 +112,13 @@ func (s *Storage) StoreTurn(turn *models.Turn) (string, error) {
 			if activeBlocks[i].BlockID != newestBlock.BlockID {
 				activeBlocks[i].Status = models.StatusPaused
 				activeBlocks[i].UpdatedAt = time.Now()
-				if err := s.saveBridgeBlock(&activeBlocks[i]); err != nil {
-					return "", fmt.Errorf("failed to auto-repair block %s: %w", activeBlocks[i].BlockID, err)
+				if saveErr := s.saveBridgeBlock(&activeBlocks[i]); saveErr != nil {
+					return "", fmt.Errorf("failed to auto-repair block %s: %w", activeBlocks[i].BlockID, saveErr)
 				}
 			}
 		}
 		// Re-fetch to get updated list
-		activeBlocks, err = s.GetActiveBridgeBlocks()
+		activeBlocks, err = s.getBridgeBlocksByStatusUnlocked(models.StatusActive)
 		if err != nil {
 			return "", fmt.Errorf("failed to re-check active blocks: %w", err)
 		}
@@ -126,8 +126,11 @@ func (s *Storage) StoreTurn(turn *models.Turn) (string, error) {
 
 	// Pause any existing active block (should be 0 or 1 now)
 	if len(activeBlocks) == 1 {
-		if err := s.UpdateBridgeBlockStatus(activeBlocks[0].BlockID, models.StatusPaused); err != nil {
-			return "", fmt.Errorf("failed to pause existing active block: %w", err)
+		existingBlock := activeBlocks[0]
+		existingBlock.Status = models.StatusPaused
+		existingBlock.UpdatedAt = time.Now()
+		if saveErr := s.saveBridgeBlock(&existingBlock); saveErr != nil {
+			return "", fmt.Errorf("failed to pause existing active block: %w", saveErr)
 		}
 	}
 
@@ -159,7 +162,7 @@ func (s *Storage) StoreTurn(turn *models.Turn) (string, error) {
 	// Generate and save embeddings if OpenAI client and ChunkEngine are configured
 	if s.openaiClient != nil && s.chunkEngine != nil {
 		if err := s.generateAndSaveEmbeddings(turn, blockID); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to generate embeddings: %v\n", err)
+			log.Printf("[Storage] failed to generate embeddings: %v", err)
 		}
 	}
 
@@ -197,6 +200,13 @@ func (s *Storage) saveBridgeBlock(block *models.BridgeBlock) error {
 
 // GetBridgeBlock retrieves a Bridge Block from Charm KV
 func (s *Storage) GetBridgeBlock(blockID string) (*models.BridgeBlock, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.getBridgeBlockUnlocked(blockID)
+}
+
+// getBridgeBlockUnlocked retrieves a Bridge Block without locking (internal use)
+func (s *Storage) getBridgeBlockUnlocked(blockID string) (*models.BridgeBlock, error) {
 	key := charm.BlockKey(blockID)
 	var block models.BridgeBlock
 	err := s.charm.GetJSON(key, &block)
@@ -222,7 +232,7 @@ func (s *Storage) SearchMemory(query string, maxResults int) ([]models.MemorySea
 	if s.openaiClient != nil && s.vectorStorage != nil {
 		semanticResults, err := s.semanticSearch(query, maxResults)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: semantic search failed: %v\n", err)
+			log.Printf("[Storage] semantic search failed: %v", err)
 		} else {
 			for _, result := range semanticResults {
 				if existingScore, exists := blockScores[result.BlockID]; exists {
@@ -460,6 +470,13 @@ func (s *Storage) GetPausedBridgeBlocks() ([]models.BridgeBlock, error) {
 
 // getBridgeBlocksByStatus retrieves all Bridge Blocks with a specific status
 func (s *Storage) getBridgeBlocksByStatus(status models.BridgeBlockStatus) ([]models.BridgeBlock, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.getBridgeBlocksByStatusUnlocked(status)
+}
+
+// getBridgeBlocksByStatusUnlocked retrieves all Bridge Blocks with a specific status without locking (internal use)
+func (s *Storage) getBridgeBlocksByStatusUnlocked(status models.BridgeBlockStatus) ([]models.BridgeBlock, error) {
 	blocks := []models.BridgeBlock{}
 
 	keys, err := s.charm.ListKeys(charm.BlockPrefix)
@@ -483,7 +500,10 @@ func (s *Storage) getBridgeBlocksByStatus(status models.BridgeBlockStatus) ([]mo
 
 // UpdateBridgeBlockStatus updates the status of a Bridge Block
 func (s *Storage) UpdateBridgeBlockStatus(blockID string, status models.BridgeBlockStatus) error {
-	block, err := s.GetBridgeBlock(blockID)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	block, err := s.getBridgeBlockUnlocked(blockID)
 	if err != nil {
 		return fmt.Errorf("failed to get block: %w", err)
 	}
@@ -496,7 +516,10 @@ func (s *Storage) UpdateBridgeBlockStatus(blockID string, status models.BridgeBl
 
 // AppendTurnToBlock appends a turn to an existing Bridge Block
 func (s *Storage) AppendTurnToBlock(blockID string, turn *models.Turn) error {
-	block, err := s.GetBridgeBlock(blockID)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	block, err := s.getBridgeBlockUnlocked(blockID)
 	if err != nil {
 		return fmt.Errorf("failed to get block: %w", err)
 	}
@@ -606,7 +629,9 @@ func (s *Storage) DeleteFactByKey(key string) (int64, error) {
 	}
 
 	// Delete the bykey lookup
-	_ = s.charm.Delete(charm.FactByKeyKey(key))
+	if err := s.charm.Delete(charm.FactByKeyKey(key)); err != nil {
+		log.Printf("[Storage] failed to delete fact bykey lookup for %s: %v", key, err)
+	}
 
 	return count, nil
 }
@@ -618,7 +643,9 @@ func (s *Storage) DeleteFactByID(factID string) error {
 	var fact models.Fact
 	if err := s.charm.GetJSON(key, &fact); err == nil {
 		// Clean up bykey lookup
-		_ = s.charm.Delete(charm.FactByKeyKey(fact.Key))
+		if err := s.charm.Delete(charm.FactByKeyKey(fact.Key)); err != nil {
+			log.Printf("[Storage] failed to delete fact bykey lookup for %s: %v", fact.Key, err)
+		}
 	}
 
 	return s.charm.Delete(key)
@@ -636,7 +663,7 @@ func (s *Storage) SaveFact(fact *models.Fact) error {
 	lookupKey := charm.FactByKeyKey(fact.Key)
 	if err := s.charm.SetJSON(lookupKey, fact.FactID); err != nil {
 		// Non-fatal, just skip the lookup index
-		fmt.Fprintf(os.Stderr, "Warning: failed to create fact lookup index: %v\n", err)
+		log.Printf("[Storage] failed to create fact lookup index: %v", err)
 	}
 
 	return nil
@@ -644,11 +671,16 @@ func (s *Storage) SaveFact(fact *models.Fact) error {
 
 // DeleteBridgeBlock deletes a bridge block and all its associated data
 func (s *Storage) DeleteBridgeBlock(blockID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	// Delete associated facts first (cascade delete)
 	facts, err := s.GetFactsForBlock(blockID)
 	if err == nil {
 		for _, fact := range facts {
-			_ = s.DeleteFactByID(fact.FactID)
+			if err := s.DeleteFactByID(fact.FactID); err != nil {
+				log.Printf("[Storage] failed to delete fact %s during block deletion: %v", fact.FactID, err)
+			}
 		}
 	}
 
@@ -658,7 +690,9 @@ func (s *Storage) DeleteBridgeBlock(blockID string) error {
 		for _, key := range keys {
 			var emb models.Embedding
 			if s.charm.GetJSON(key, &emb) == nil && emb.BlockID == blockID {
-				_ = s.charm.Delete(key)
+				if err := s.charm.Delete(key); err != nil {
+					log.Printf("[Storage] failed to delete embedding %s during block deletion: %v", key, err)
+				}
 			}
 		}
 	}
@@ -684,7 +718,7 @@ func (s *Storage) RepairActiveBlockInvariant() (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	activeBlocks, err := s.GetActiveBridgeBlocks()
+	activeBlocks, err := s.getBridgeBlocksByStatusUnlocked(models.StatusActive)
 	if err != nil {
 		return false, fmt.Errorf("failed to get active blocks: %w", err)
 	}

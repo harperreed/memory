@@ -19,6 +19,12 @@ const (
 	TopicShift RoutingScenario = "topic_shift"
 )
 
+// IsValid checks if the RoutingScenario is a valid value
+func (r RoutingScenario) IsValid() bool {
+	return r == TopicContinuation || r == TopicResumption ||
+	       r == NewTopicFirst || r == TopicShift
+}
+
 // RoutingDecision contains the routing decision and relevant metadata
 type RoutingDecision struct {
 	Scenario       RoutingScenario `json:"scenario"`

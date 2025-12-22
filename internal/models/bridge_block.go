@@ -2,7 +2,10 @@
 // ABOUTME: Organizes turns by topic with routing metadata
 package models
 
-import "time"
+import (
+	"errors"
+	"time"
+)
 
 // BridgeBlockStatus represents the current state of a Bridge Block
 type BridgeBlockStatus string
@@ -26,4 +29,26 @@ type BridgeBlock struct {
 	Turns       []Turn            `json:"turns"`
 	Summary     string            `json:"summary,omitempty"`
 	TurnCount   int               `json:"turn_count"`
+}
+
+// Validate checks if the BridgeBlock has valid data
+func (b *BridgeBlock) Validate() error {
+	if b.BlockID == "" {
+		return errors.New("block ID cannot be empty")
+	}
+	if b.TopicLabel == "" {
+		return errors.New("topic label cannot be empty")
+	}
+	if b.Status != StatusActive && b.Status != StatusPaused &&
+	   b.Status != StatusClosed && b.Status != StatusArchived {
+		return errors.New("invalid status")
+	}
+	return nil
+}
+
+// AddTurn appends a turn to the bridge block and updates metadata
+func (b *BridgeBlock) AddTurn(turn Turn) {
+	b.Turns = append(b.Turns, turn)
+	b.TurnCount = len(b.Turns)
+	b.UpdatedAt = time.Now().UTC()
 }

@@ -38,7 +38,7 @@ Example `.env`:
 ```bash
 OPENAI_API_KEY=sk-proj-...
 ANTHROPIC_API_KEY=sk-ant-...  # Optional, for future features
-MEMORY_OPENAI_MODEL=gpt-5-mini  # Optional, defaults to gpt-5-mini
+MEMORY_OPENAI_MODEL=gpt-4o-mini  # Optional, defaults to gpt-4o-mini
 ```
 
 3. **Build the server:**
@@ -61,16 +61,15 @@ The server will start on stdio and wait for MCP protocol messages.
 - `OPENAI_API_KEY` - Your OpenAI API key for embeddings and LLM features
 
 **Optional:**
-- `MEMORY_OPENAI_MODEL` - Chat model to use (default: `gpt-5-mini`)
-  - Options: `gpt-5-mini`, `gpt-5-nano`, `gpt-5`, `gpt-4o-mini`, etc.
+- `MEMORY_OPENAI_MODEL` - Chat model to use (default: `gpt-4o-mini`)
+  - Options: `gpt-4o-mini`, `gpt-4o`, `o1-mini`, etc.
   - Affects metadata extraction, fact extraction, and user profile learning
-  - GPT-5-mini is recommended for best balance of speed and quality
-  - GPT-5-nano for fastest/cheapest option
+  - gpt-4o-mini is recommended for best balance of speed and quality
 
 **Model Selection Guide:**
-- `gpt-5-nano`: Fastest, lowest cost (~$0.05/1M input tokens)
-- `gpt-5-mini`: **Recommended** - Good balance (~$0.25/1M input tokens)
-- `gpt-5`: Highest quality, slower, more expensive
+- `gpt-4o-mini`: **Recommended** - Good balance of speed, quality, and cost (~$0.15/1M input tokens)
+- `gpt-4o`: Highest quality, slower, more expensive (~$2.50/1M input tokens)
+- `o1-mini`: Advanced reasoning capabilities (~$3/1M input tokens)
 
 ## Usage with Claude Code
 
@@ -84,7 +83,7 @@ Add to your Claude Code MCP settings (`~/.config/claude-code/mcp_settings.json`)
       "args": [],
       "env": {
         "OPENAI_API_KEY": "your-key-here",
-        "MEMORY_OPENAI_MODEL": "gpt-5-mini"
+        "MEMORY_OPENAI_MODEL": "gpt-4o-mini"
       }
     }
   }

@@ -3,6 +3,8 @@
 package commands
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 )
 
@@ -38,6 +40,13 @@ HMLR Architecture Components:
   • Scribe         - Async user profile learning
   • ContextHydrator - Intelligent prompt assembly`,
 		SilenceUsage: true,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Check for mutually exclusive flags
+			if verbose && quiet {
+				return fmt.Errorf("--verbose and --quiet flags are mutually exclusive")
+			}
+			return nil
+		},
 	}
 
 	// Global flags

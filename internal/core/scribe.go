@@ -14,6 +14,7 @@ import (
 
 	"github.com/harper/remember-standalone/internal/models"
 	"github.com/harper/remember-standalone/internal/storage"
+	"github.com/harper/remember-standalone/internal/util"
 	openai "github.com/sashabaranov/go-openai"
 )
 
@@ -43,13 +44,17 @@ func NewScribe(client interface{}) *Scribe {
 		oaiClient = wrapper.GetClient()
 	} else {
 		// Assume it's already an OpenAI client
-		oaiClient = client.(*openai.Client)
+		var ok bool
+		oaiClient, ok = client.(*openai.Client)
+		if !ok {
+			panic(fmt.Sprintf("invalid client type: expected *openai.Client, got %T", client))
+		}
 	}
 
 	// Get chat model from env or use default
 	chatModel := os.Getenv("MEMORY_OPENAI_MODEL")
 	if chatModel == "" {
-		chatModel = "gpt-5-mini"
+		chatModel = "gpt-4o-mini"
 	}
 
 	return &Scribe{
@@ -85,6 +90,9 @@ func (s *Scribe) updateProfile(userMessage string, profile *models.UserProfile, 
 	}
 
 	// Lock for concurrent updates
+	// Note: Profile updates use last-write-wins semantics. Multiple concurrent
+	// updates may lose data. This is acceptable for preference learning where
+	// the LLM will re-extract important information over time.
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -131,11 +139,10 @@ If nothing is found, return an empty object: {}`
 
 	for attempt := 0; attempt <= s.maxRetries; attempt++ {
 		if attempt > 0 {
-			time.Sleep(s.retryDelay * time.Duration(attempt))
+			time.Sleep(util.CalculateBackoff(s.retryDelay, attempt))
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
 
 		resp, err := s.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 			Model: s.chatModel,
@@ -153,11 +160,13 @@ If nothing is found, return an empty object: {}`
 		})
 
 		if err != nil {
+			cancel()
 			lastErr = fmt.Errorf("attempt %d: %w", attempt+1, err)
 			continue
 		}
 
 		if len(resp.Choices) == 0 {
+			cancel()
 			lastErr = fmt.Errorf("attempt %d: no completion choices returned", attempt+1)
 			continue
 		}
@@ -167,10 +176,12 @@ If nothing is found, return an empty object: {}`
 		// Parse JSON response
 		var userInfo map[string]interface{}
 		if err := json.Unmarshal([]byte(content), &userInfo); err != nil {
+			cancel()
 			lastErr = fmt.Errorf("attempt %d: failed to parse JSON: %w", attempt+1, err)
 			continue
 		}
 
+		cancel()
 		return userInfo, nil
 	}
 

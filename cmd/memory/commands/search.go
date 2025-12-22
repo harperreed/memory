@@ -44,6 +44,11 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	// Load .env for API keys
 	_ = godotenv.Load()
 
+	// Validate limit flag
+	if err := validatePositiveInt(searchLimit, "limit"); err != nil {
+		return err
+	}
+
 	query := args[0]
 
 	// Initialize storage
@@ -104,12 +109,4 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
-}
-
-func truncate(s string, maxLen int) string {
-	runes := []rune(s)
-	if len(runes) <= maxLen {
-		return s
-	}
-	return string(runes[:maxLen]) + "..."
 }

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"text/tabwriter"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -120,11 +119,11 @@ func runList(cmd *cobra.Command, args []string) error {
 			}
 
 			fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\n",
-				truncateList(topic, 30),
+				truncate(topic, 30),
 				block.Status,
 				block.TurnCount,
 				createdStr,
-				truncateList(block.BlockID, 25))
+				truncate(block.BlockID, 25))
 		}
 		w.Flush()
 
@@ -134,31 +133,4 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 
 	return nil
-}
-
-func truncateList(s string, maxLen int) string {
-	runes := []rune(s)
-	if len(runes) <= maxLen {
-		return s
-	}
-	return string(runes[:maxLen]) + "..."
-}
-
-func formatTime(t time.Time) string {
-	now := time.Now()
-	diff := now.Sub(t)
-
-	if diff < time.Minute {
-		return "just now"
-	} else if diff < time.Hour {
-		mins := int(diff.Minutes())
-		return fmt.Sprintf("%dm ago", mins)
-	} else if diff < 24*time.Hour {
-		hours := int(diff.Hours())
-		return fmt.Sprintf("%dh ago", hours)
-	} else if diff < 7*24*time.Hour {
-		days := int(diff.Hours() / 24)
-		return fmt.Sprintf("%dd ago", days)
-	}
-	return t.Format("2006-01-02")
 }

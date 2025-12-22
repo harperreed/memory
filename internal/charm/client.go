@@ -5,12 +5,14 @@ package charm
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"sync"
 
 	"github.com/charmbracelet/charm/client"
 	"github.com/charmbracelet/charm/kv"
+	"github.com/harper/remember-standalone/internal/config"
 )
 
 // Key prefixes for different entity types
@@ -21,46 +23,17 @@ const (
 	EmbeddingPrefix = "embedding:"
 )
 
-// Config holds charm client configuration
-type Config struct {
-	Host     string
-	DBName   string
-	AutoSync bool
-}
-
-// DefaultConfig returns default configuration for charm client
-func DefaultConfig() *Config {
-	host := os.Getenv("CHARM_HOST")
-	if host == "" {
-		host = "charm.2389.dev"
-	}
-	return &Config{
-		Host:     host,
-		DBName:   "memory",
-		AutoSync: true,
-	}
-}
 
 var (
 	globalClient *Client
-	clientOnce   sync.Once
-	clientErr    error
 	clientMu     sync.Mutex
 )
 
 // Client wraps charm KV for storage operations
 type Client struct {
 	kv     *kv.KV
-	config *Config
+	config *config.Config
 	mu     sync.Mutex
-}
-
-// InitClient initializes the global charm client (thread-safe singleton)
-func InitClient() error {
-	clientOnce.Do(func() {
-		globalClient, clientErr = NewClient(DefaultConfig())
-	})
-	return clientErr
 }
 
 // GetClient returns the global client, initializing if needed
@@ -68,16 +41,29 @@ func GetClient() (*Client, error) {
 	clientMu.Lock()
 	defer clientMu.Unlock()
 
-	// If client was closed, reinitialize
-	if globalClient != nil && globalClient.kv == nil {
-		clientOnce = sync.Once{}
-		globalClient = nil
+	// If client exists and is valid, return it
+	if globalClient != nil && globalClient.kv != nil {
+		return globalClient, nil
 	}
 
-	if err := InitClient(); err != nil {
+	// Load configuration
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load config: %w", err)
+	}
+
+	// Create new client
+	globalClient, err = NewClient(cfg)
+	if err != nil {
 		return nil, err
 	}
 	return globalClient, nil
+}
+
+// InitClient initializes the global charm client (for backward compatibility)
+func InitClient() error {
+	_, err := GetClient()
+	return err
 }
 
 // ResetGlobalClient resets the global client (for testing)
@@ -85,20 +71,20 @@ func ResetGlobalClient() {
 	clientMu.Lock()
 	defer clientMu.Unlock()
 	if globalClient != nil {
-		_ = globalClient.Close()
+		if err := globalClient.Close(); err != nil {
+			log.Printf("[CharmClient] failed to close during reset: %v", err)
+		}
 	}
-	clientOnce = sync.Once{}
 	globalClient = nil
-	clientErr = nil
 }
 
 // NewClient creates a new charm client with the given config
 // Automatically falls back to read-only mode if another process holds the lock.
-func NewClient(cfg *Config) (*Client, error) {
+func NewClient(cfg *config.Config) (*Client, error) {
 	// Set CHARM_HOST before opening KV
-	os.Setenv("CHARM_HOST", cfg.Host)
+	os.Setenv("CHARM_HOST", cfg.CharmHost)
 
-	db, err := kv.OpenWithDefaultsFallback(cfg.DBName)
+	db, err := kv.OpenWithDefaultsFallback(cfg.CharmDBName)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open charm kv: %w", err)
 	}
@@ -110,7 +96,9 @@ func NewClient(cfg *Config) (*Client, error) {
 
 	// Pull remote data on startup (skip in read-only mode)
 	if cfg.AutoSync && !db.IsReadOnly() {
-		_ = db.Sync()
+		if err := db.Sync(); err != nil {
+			log.Printf("[CharmClient] failed to sync on startup: %v", err)
+		}
 	}
 
 	return c, nil
@@ -135,7 +123,9 @@ func (c *Client) IsReadOnly() bool {
 // syncIfEnabled syncs to cloud after writes (skip in read-only mode)
 func (c *Client) syncIfEnabled() {
 	if c.config.AutoSync && !c.kv.IsReadOnly() {
-		_ = c.kv.Sync()
+		if err := c.kv.Sync(); err != nil {
+			log.Printf("[CharmClient] failed to sync: %v", err)
+		}
 	}
 }
 

@@ -1,5 +1,5 @@
 // ABOUTME: OpenAI client for embeddings and LLM-based extraction
-// ABOUTME: Uses text-embedding-3-small for embeddings, gpt-5-mini for structured extraction (configurable)
+// ABOUTME: Uses text-embedding-3-small for embeddings, gpt-4o-mini for structured extraction (configurable)
 package llm
 
 import (
@@ -10,12 +10,13 @@ import (
 	"time"
 
 	"github.com/harper/remember-standalone/internal/models"
+	"github.com/harper/remember-standalone/internal/util"
 	openai "github.com/sashabaranov/go-openai"
 )
 
 const (
 	// DefaultChatModel is the default model for chat completions
-	DefaultChatModel = "gpt-5-mini"
+	DefaultChatModel = "gpt-4o-mini"
 	// DefaultEmbeddingModel is the default model for embeddings
 	DefaultEmbeddingModel = openai.SmallEmbedding3
 )
@@ -87,11 +88,10 @@ func (c *OpenAIClient) GenerateEmbedding(text string) ([]float64, error) {
 
 	for attempt := 0; attempt <= c.maxRetries; attempt++ {
 		if attempt > 0 {
-			time.Sleep(c.retryDelay * time.Duration(attempt))
+			time.Sleep(util.CalculateBackoff(c.retryDelay, attempt))
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
 
 		resp, err := c.client.CreateEmbeddings(ctx, openai.EmbeddingRequestStrings{
 			Input: []string{text},
@@ -99,11 +99,13 @@ func (c *OpenAIClient) GenerateEmbedding(text string) ([]float64, error) {
 		})
 
 		if err != nil {
+			cancel()
 			lastErr = fmt.Errorf("attempt %d: %w", attempt+1, err)
 			continue
 		}
 
 		if len(resp.Data) == 0 {
+			cancel()
 			lastErr = fmt.Errorf("attempt %d: no embeddings returned", attempt+1)
 			continue
 		}
@@ -115,6 +117,7 @@ func (c *OpenAIClient) GenerateEmbedding(text string) ([]float64, error) {
 			embedding64[i] = float64(v)
 		}
 
+		cancel()
 		return embedding64, nil
 	}
 
@@ -136,11 +139,10 @@ Return ONLY a JSON object with these three fields. No additional text.`
 
 	for attempt := 0; attempt <= c.maxRetries; attempt++ {
 		if attempt > 0 {
-			time.Sleep(c.retryDelay * time.Duration(attempt))
+			time.Sleep(util.CalculateBackoff(c.retryDelay, attempt))
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
 
 		resp, err := c.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 			Model: c.chatModel,
@@ -158,11 +160,13 @@ Return ONLY a JSON object with these three fields. No additional text.`
 		})
 
 		if err != nil {
+			cancel()
 			lastErr = fmt.Errorf("attempt %d: %w", attempt+1, err)
 			continue
 		}
 
 		if len(resp.Choices) == 0 {
+			cancel()
 			lastErr = fmt.Errorf("attempt %d: no completion choices returned", attempt+1)
 			continue
 		}
@@ -172,10 +176,12 @@ Return ONLY a JSON object with these three fields. No additional text.`
 		// Parse JSON response
 		var metadata map[string]interface{}
 		if err := json.Unmarshal([]byte(content), &metadata); err != nil {
+			cancel()
 			lastErr = fmt.Errorf("attempt %d: failed to parse JSON: %w", attempt+1, err)
 			continue
 		}
 
+		cancel()
 		return metadata, nil
 	}
 
@@ -214,11 +220,10 @@ Extract EVERY fact explicitly stated. Do not infer or assume.`
 
 	for attempt := 0; attempt <= c.maxRetries; attempt++ {
 		if attempt > 0 {
-			time.Sleep(c.retryDelay * time.Duration(attempt))
+			time.Sleep(util.CalculateBackoff(c.retryDelay, attempt))
 		}
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
 
 		resp, err := c.client.CreateChatCompletion(ctx, openai.ChatCompletionRequest{
 			Model: c.chatModel,
@@ -236,11 +241,13 @@ Extract EVERY fact explicitly stated. Do not infer or assume.`
 		})
 
 		if err != nil {
+			cancel()
 			lastErr = fmt.Errorf("attempt %d: %w", attempt+1, err)
 			continue
 		}
 
 		if len(resp.Choices) == 0 {
+			cancel()
 			lastErr = fmt.Errorf("attempt %d: no completion choices returned", attempt+1)
 			continue
 		}
@@ -256,6 +263,7 @@ Extract EVERY fact explicitly stated. Do not infer or assume.`
 
 		var factResponses []FactResponse
 		if err := json.Unmarshal([]byte(content), &factResponses); err != nil {
+			cancel()
 			lastErr = fmt.Errorf("attempt %d: failed to parse JSON: %w", attempt+1, err)
 			continue
 		}
@@ -270,6 +278,7 @@ Extract EVERY fact explicitly stated. Do not infer or assume.`
 			}
 		}
 
+		cancel()
 		return facts, nil
 	}
 
