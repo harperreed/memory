@@ -4,6 +4,7 @@
 package charm
 
 import (
+	"os"
 	"sync"
 	"testing"
 
@@ -11,6 +12,11 @@ import (
 )
 
 func TestWALConcurrentConnections(t *testing.T) {
+	// Skip if no Charm server configured - this test connects to Charm cloud
+	if os.Getenv("CHARM_HOST") == "" {
+		t.Skip("Skipping: CHARM_HOST not configured (requires Charm server)")
+	}
+
 	// Test that multiple KV connections can open the same database concurrently.
 	// This verifies the WAL mode fix prevents SQLITE_BUSY errors.
 	tmpDir := t.TempDir()
