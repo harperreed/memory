@@ -3,9 +3,12 @@
 package commands
 
 import (
+	"bufio"
 	"fmt"
 	"os"
+	"strings"
 
+	"github.com/charmbracelet/charm/kv"
 	"github.com/harper/remember-standalone/internal/charm"
 	"github.com/harper/remember-standalone/internal/storage"
 	"github.com/spf13/cobra"
@@ -25,6 +28,8 @@ syncs automatically across devices linked to the same Charm account.`,
 	cmd.AddCommand(newSyncStatusCmd())
 	cmd.AddCommand(newSyncNowCmd())
 	cmd.AddCommand(newSyncRepairCmd())
+	cmd.AddCommand(newSyncRepairBlocksCmd())
+	cmd.AddCommand(newSyncResetCmd())
 	cmd.AddCommand(newSyncWipeCmd())
 	cmd.AddCommand(newSyncKeysCmd())
 
@@ -79,8 +84,62 @@ func newSyncNowCmd() *cobra.Command {
 }
 
 func newSyncRepairCmd() *cobra.Command {
-	return &cobra.Command{
+	var force bool
+
+	cmd := &cobra.Command{
 		Use:   "repair",
+		Short: "Repair corrupted database",
+		Long: `Repair a corrupted database by checkpointing WAL, removing SHM, and verifying integrity.
+
+This command performs the following steps:
+1. Checkpoint WAL (merge pending writes into main DB)
+2. Remove stale SHM file
+3. Run integrity check
+4. Vacuum database
+
+If --force is specified and integrity check fails:
+5. Attempt REINDEX recovery
+6. Reset from cloud as last resort
+
+Use this when you encounter database corruption errors.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			fmt.Println("Repairing database...")
+			result, err := kv.Repair("memory", force)
+
+			if result.WalCheckpointed {
+				fmt.Println("  ✓ WAL checkpointed")
+			}
+			if result.ShmRemoved {
+				fmt.Println("  ✓ SHM file removed")
+			}
+			if result.IntegrityOK {
+				fmt.Println("  ✓ Integrity check passed")
+			} else {
+				fmt.Println("  ✗ Integrity check failed")
+			}
+			if result.Vacuumed {
+				fmt.Println("  ✓ Database vacuumed")
+			}
+
+			if err != nil {
+				if !force {
+					fmt.Println("\nRun with --force to attempt recovery.")
+				}
+				return fmt.Errorf("repair failed: %w", err)
+			}
+
+			fmt.Println("\nRepair completed successfully")
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVar(&force, "force", false, "Attempt recovery if integrity check fails")
+	return cmd
+}
+
+func newSyncRepairBlocksCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "repair-blocks",
 		Short: "Repair invariant violations (e.g., multiple active blocks)",
 		Long: `Repair storage invariant violations that can occur with distributed sync.
 
@@ -111,40 +170,88 @@ as ACTIVE and pauses the others.`,
 	}
 }
 
-func newSyncWipeCmd() *cobra.Command {
-	var confirm bool
+func newSyncResetCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "reset",
+		Short: "Delete local database and re-sync from cloud",
+		Long: `Delete the local database and rebuild by syncing from Charm Cloud.
 
-	cmd := &cobra.Command{
-		Use:   "wipe",
-		Short: "Wipe all local data (nuclear option)",
-		Long: `Completely wipe all local Charm data.
-
-WARNING: This deletes all locally cached data. Your cloud data
-remains intact and will be re-synced on next access.`,
+This discards any unsynced local data and pulls a fresh copy from the cloud.
+Useful when the local database is corrupted but cloud data is intact.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if !confirm {
-				fmt.Println("This will wipe ALL local data!")
-				fmt.Println("Run with --confirm to proceed")
+			reader := bufio.NewReader(os.Stdin)
+
+			fmt.Println("This will delete your local database and re-download from Charm Cloud.")
+			fmt.Println("Any unsynced local data will be lost.")
+			fmt.Println()
+			fmt.Print("Continue? [y/N] ")
+
+			input, err := reader.ReadString('\n')
+			if err != nil {
+				return fmt.Errorf("failed to read input: %w", err)
+			}
+
+			input = strings.TrimSpace(input)
+			if input != "y" && input != "Y" {
+				fmt.Println("Reset cancelled")
 				return nil
 			}
 
-			client, err := charm.GetClient()
-			if err != nil {
-				return fmt.Errorf("failed to connect to Charm: %w", err)
+			fmt.Println("\nResetting database...")
+			if err := kv.Reset("memory"); err != nil {
+				return fmt.Errorf("reset failed: %w", err)
 			}
 
-			if err := client.Reset(); err != nil {
-				return fmt.Errorf("failed to wipe data: %w", err)
-			}
-
-			fmt.Println("Local data wiped successfully")
+			fmt.Println("Database reset successfully")
 			return nil
 		},
 	}
+}
 
-	cmd.Flags().BoolVar(&confirm, "confirm", false, "Confirm the wipe operation")
+func newSyncWipeCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "wipe",
+		Short: "Permanently delete ALL data (local and cloud)",
+		Long: `Permanently delete ALL data for this database, both local and cloud.
 
-	return cmd
+WARNING: This is DESTRUCTIVE and CANNOT BE UNDONE!
+This will delete:
+- Local database files
+- All cloud backups
+
+Use 'sync reset' if you only want to delete local data and re-sync from cloud.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			reader := bufio.NewReader(os.Stdin)
+
+			fmt.Println("WARNING: This will permanently delete ALL data!")
+			fmt.Println("This includes local AND cloud data. This cannot be undone.")
+			fmt.Println()
+			fmt.Print("Type 'wipe' to confirm: ")
+
+			input, err := reader.ReadString('\n')
+			if err != nil {
+				return fmt.Errorf("failed to read input: %w", err)
+			}
+
+			input = strings.TrimSpace(input)
+			if input != "wipe" {
+				fmt.Println("Wipe cancelled")
+				return nil
+			}
+
+			fmt.Println("\nWiping all data...")
+			result, err := kv.Wipe("memory")
+			if err != nil {
+				return fmt.Errorf("wipe failed: %w", err)
+			}
+
+			fmt.Printf("Deleted %d cloud backups\n", result.CloudBackupsDeleted)
+			fmt.Printf("Deleted %d local files\n", result.LocalFilesDeleted)
+			fmt.Println("\nAll data permanently deleted")
+
+			return nil
+		},
+	}
 }
 
 func newSyncKeysCmd() *cobra.Command {
