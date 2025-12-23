@@ -1,14 +1,13 @@
-// ABOUTME: Charm KV client wrapper for cloud-synced storage
-// ABOUTME: Replaces SQLite and file-based storage with automatic SSH key auth
+// ABOUTME: Charm KV client wrapper using transactional Do API
+// ABOUTME: Short-lived connections to avoid lock contention with other MCP servers
+
 package charm
 
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"strings"
-	"sync"
 
 	"github.com/charmbracelet/charm/client"
 	"github.com/charmbracelet/charm/kv"
@@ -23,162 +22,68 @@ const (
 	EmbeddingPrefix = "embedding:"
 )
 
-
-var (
-	globalClient *Client
-	clientMu     sync.Mutex
-)
-
-// Client wraps charm KV for storage operations
+// Client holds configuration for KV operations.
+// Unlike the previous implementation, it does NOT hold a persistent connection.
+// Each operation opens the database, performs the operation, and closes it.
 type Client struct {
-	kv     *kv.KV
-	config *config.Config
-	mu     sync.Mutex
+	dbName   string
+	autoSync bool
 }
 
-// GetClient returns the global client, initializing if needed
-func GetClient() (*Client, error) {
-	clientMu.Lock()
-	defer clientMu.Unlock()
-
-	// If client exists and is valid, return it
-	if globalClient != nil && globalClient.kv != nil {
-		return globalClient, nil
-	}
-
-	// Load configuration
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load config: %w", err)
-	}
-
-	// Create new client
-	globalClient, err = NewClient(cfg)
-	if err != nil {
-		return nil, err
-	}
-	return globalClient, nil
-}
-
-// InitClient initializes the global charm client (for backward compatibility)
-func InitClient() error {
-	_, err := GetClient()
-	return err
-}
-
-// ResetGlobalClient resets the global client (for testing)
-func ResetGlobalClient() {
-	clientMu.Lock()
-	defer clientMu.Unlock()
-	if globalClient != nil {
-		if err := globalClient.Close(); err != nil {
-			log.Printf("[CharmClient] failed to close during reset: %v", err)
-		}
-	}
-	globalClient = nil
-}
-
-// NewClient creates a new charm client with the given config
-// Automatically falls back to read-only mode if another process holds the lock.
+// NewClient creates a new charm client with the given config.
+// Configuration is loaded but no persistent connection is established.
 func NewClient(cfg *config.Config) (*Client, error) {
-	// Set CHARM_HOST before opening KV
-	os.Setenv("CHARM_HOST", cfg.CharmHost)
-
-	db, err := kv.OpenWithDefaultsFallback(cfg.CharmDBName)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open charm kv: %w", err)
-	}
-
-	c := &Client{
-		kv:     db,
-		config: cfg,
-	}
-
-	// Pull remote data on startup (skip in read-only mode)
-	if cfg.AutoSync && !db.IsReadOnly() {
-		if err := db.Sync(); err != nil {
-			log.Printf("[CharmClient] failed to sync on startup: %v", err)
+	// Set CHARM_HOST before any KV operations
+	if cfg.CharmHost != "" {
+		if err := os.Setenv("CHARM_HOST", cfg.CharmHost); err != nil {
+			return nil, fmt.Errorf("failed to set CHARM_HOST: %w", err)
 		}
 	}
 
-	return c, nil
+	return &Client{
+		dbName:   cfg.CharmDBName,
+		autoSync: cfg.AutoSync,
+	}, nil
 }
 
-// Close closes the KV database
-func (c *Client) Close() error {
-	if c.kv != nil {
-		err := c.kv.Close()
-		c.kv = nil // Mark as closed so GetClient knows to reinitialize
-		return err
-	}
-	return nil
-}
-
-// IsReadOnly returns true if the database is open in read-only mode.
-// This happens when another process (like an MCP server) holds the lock.
-func (c *Client) IsReadOnly() bool {
-	return c.kv.IsReadOnly()
-}
-
-// syncIfEnabled syncs to cloud after writes (skip in read-only mode)
-func (c *Client) syncIfEnabled() {
-	if c.config.AutoSync && !c.kv.IsReadOnly() {
-		if err := c.kv.Sync(); err != nil {
-			log.Printf("[CharmClient] failed to sync: %v", err)
-		}
-	}
-}
-
-// ID returns the charm user ID
-func (c *Client) ID() (string, error) {
-	cc, err := client.NewClientWithDefaults()
-	if err != nil {
-		return "", fmt.Errorf("failed to create charm client: %w", err)
-	}
-	return cc.ID()
-}
-
-// Set stores a value with the given key
-func (c *Client) Set(key string, value []byte) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.kv.IsReadOnly() {
-		return fmt.Errorf("cannot write: database is locked by another process (MCP server?)")
-	}
-
-	if err := c.kv.Set([]byte(key), value); err != nil {
-		return fmt.Errorf("failed to set key %s: %w", key, err)
-	}
-	c.syncIfEnabled()
-	return nil
-}
-
-// Get retrieves a value by key
+// Get retrieves a value by key (read-only, no lock contention).
 func (c *Client) Get(key string) ([]byte, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	return c.kv.Get([]byte(key))
+	var val []byte
+	err := kv.DoReadOnly(c.dbName, func(k *kv.KV) error {
+		var err error
+		val, err = k.Get([]byte(key))
+		return err
+	})
+	return val, err
 }
 
-// Delete removes a key
+// Set stores a value with the given key.
+func (c *Client) Set(key string, value []byte) error {
+	return kv.Do(c.dbName, func(k *kv.KV) error {
+		if err := k.Set([]byte(key), value); err != nil {
+			return fmt.Errorf("failed to set key %s: %w", key, err)
+		}
+		if c.autoSync {
+			return k.Sync()
+		}
+		return nil
+	})
+}
+
+// Delete removes a key.
 func (c *Client) Delete(key string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.kv.IsReadOnly() {
-		return fmt.Errorf("cannot write: database is locked by another process (MCP server?)")
-	}
-
-	if err := c.kv.Delete([]byte(key)); err != nil {
-		return fmt.Errorf("failed to delete key %s: %w", key, err)
-	}
-	c.syncIfEnabled()
-	return nil
+	return kv.Do(c.dbName, func(k *kv.KV) error {
+		if err := k.Delete([]byte(key)); err != nil {
+			return fmt.Errorf("failed to delete key %s: %w", key, err)
+		}
+		if c.autoSync {
+			return k.Sync()
+		}
+		return nil
+	})
 }
 
-// SetJSON marshals and stores a value as JSON
+// SetJSON marshals and stores a value as JSON.
 func (c *Client) SetJSON(key string, value interface{}) error {
 	data, err := json.Marshal(value)
 	if err != nil {
@@ -187,7 +92,7 @@ func (c *Client) SetJSON(key string, value interface{}) error {
 	return c.Set(key, data)
 }
 
-// GetJSON retrieves and unmarshals a JSON value
+// GetJSON retrieves and unmarshals a JSON value.
 func (c *Client) GetJSON(key string, dest interface{}) error {
 	data, err := c.Get(key)
 	if err != nil {
@@ -199,40 +104,69 @@ func (c *Client) GetJSON(key string, dest interface{}) error {
 	return json.Unmarshal(data, dest)
 }
 
-// ListKeys returns all keys with the given prefix
+// ListKeys returns all keys with the given prefix.
 func (c *Client) ListKeys(prefix string) ([]string, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	keys, err := c.kv.Keys()
-	if err != nil {
-		return nil, fmt.Errorf("failed to list keys: %w", err)
-	}
-
 	var result []string
-	for _, key := range keys {
-		keyStr := string(key)
-		if strings.HasPrefix(keyStr, prefix) {
-			result = append(result, keyStr)
+	err := kv.DoReadOnly(c.dbName, func(k *kv.KV) error {
+		keys, err := k.Keys()
+		if err != nil {
+			return fmt.Errorf("failed to list keys: %w", err)
 		}
-	}
-	return result, nil
+		for _, key := range keys {
+			keyStr := string(key)
+			if strings.HasPrefix(keyStr, prefix) {
+				result = append(result, keyStr)
+			}
+		}
+		return nil
+	})
+	return result, err
 }
 
-// Sync manually triggers a sync with the cloud (skip in read-only mode)
+// DoReadOnly executes a function with read-only database access.
+// Use this for batch read operations that need multiple Gets.
+func (c *Client) DoReadOnly(fn func(k *kv.KV) error) error {
+	return kv.DoReadOnly(c.dbName, fn)
+}
+
+// Do executes a function with write access to the database.
+// Use this for batch write operations.
+func (c *Client) Do(fn func(k *kv.KV) error) error {
+	return kv.Do(c.dbName, func(k *kv.KV) error {
+		if err := fn(k); err != nil {
+			return err
+		}
+		if c.autoSync {
+			return k.Sync()
+		}
+		return nil
+	})
+}
+
+// Sync triggers a manual sync with the charm server.
 func (c *Client) Sync() error {
-	if c.kv.IsReadOnly() {
-		return nil // Silently skip sync in read-only mode
-	}
-	return c.kv.Sync()
+	return kv.Do(c.dbName, func(k *kv.KV) error {
+		return k.Sync()
+	})
 }
 
-// Reset wipes all local data (nuclear option)
+// Reset clears all data (nuclear option).
 func (c *Client) Reset() error {
-	return c.kv.Reset()
+	return kv.Do(c.dbName, func(k *kv.KV) error {
+		return k.Reset()
+	})
 }
 
-// GetAuthorizedKeys returns the list of linked devices/keys
+// ID returns the charm user ID for this device.
+func (c *Client) ID() (string, error) {
+	cc, err := client.NewClientWithDefaults()
+	if err != nil {
+		return "", fmt.Errorf("failed to create charm client: %w", err)
+	}
+	return cc.ID()
+}
+
+// GetAuthorizedKeys returns the list of linked devices/keys.
 func (c *Client) GetAuthorizedKeys() (string, error) {
 	cc, err := client.NewClientWithDefaults()
 	if err != nil {
@@ -241,13 +175,51 @@ func (c *Client) GetAuthorizedKeys() (string, error) {
 	return cc.AuthorizedKeys()
 }
 
-// UnlinkKey removes an authorized key from the account
+// UnlinkKey removes an authorized key from the account.
 func (c *Client) UnlinkKey(key string) error {
 	cc, err := client.NewClientWithDefaults()
 	if err != nil {
 		return fmt.Errorf("failed to create charm client: %w", err)
 	}
 	return cc.UnlinkAuthorizedKey(key)
+}
+
+// --- Legacy compatibility layer ---
+// These functions maintain backwards compatibility with existing code.
+
+var globalClient *Client
+
+// GetClient returns the global client, initializing if needed.
+func GetClient() (*Client, error) {
+	if globalClient != nil {
+		return globalClient, nil
+	}
+	return InitClient()
+}
+
+// InitClient initializes the global charm client.
+// With the new architecture, this just creates a Client instance.
+func InitClient() (*Client, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load config: %w", err)
+	}
+	globalClient, err = NewClient(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return globalClient, nil
+}
+
+// ResetGlobalClient resets the global client singleton (for testing).
+func ResetGlobalClient() {
+	globalClient = nil
+}
+
+// Close is a no-op for backwards compatibility.
+// With Do API, connections are automatically closed after each operation.
+func (c *Client) Close() error {
+	return nil
 }
 
 // BlockKey generates a key for a BridgeBlock
