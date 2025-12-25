@@ -66,4 +66,5 @@ require (
 	modernc.org/sqlite v1.41.0 // indirect
 )
 
-replace github.com/charmbracelet/charm => github.com/2389-research/charm v0.18.0
+// Using fork with stale sync support
+replace github.com/charmbracelet/charm => github.com/2389-research/charm v0.19.0

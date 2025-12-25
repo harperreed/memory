@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/charm/client"
 	"github.com/charmbracelet/charm/kv"
@@ -26,8 +27,9 @@ const (
 // Unlike the previous implementation, it does NOT hold a persistent connection.
 // Each operation opens the database, performs the operation, and closes it.
 type Client struct {
-	dbName   string
-	autoSync bool
+	dbName         string
+	autoSync       bool
+	staleThreshold time.Duration
 }
 
 // NewClient creates a new charm client with the given config.
@@ -41,13 +43,18 @@ func NewClient(cfg *config.Config) (*Client, error) {
 	}
 
 	return &Client{
-		dbName:   cfg.CharmDBName,
-		autoSync: cfg.AutoSync,
+		dbName:         cfg.CharmDBName,
+		autoSync:       cfg.AutoSync,
+		staleThreshold: cfg.StaleThreshold,
 	}, nil
 }
 
 // Get retrieves a value by key (read-only, no lock contention).
 func (c *Client) Get(key string) ([]byte, error) {
+	if err := c.SyncIfStale(); err != nil {
+		return nil, fmt.Errorf("failed to sync before read: %w", err)
+	}
+
 	var val []byte
 	err := kv.DoReadOnly(c.dbName, func(k *kv.KV) error {
 		var err error
@@ -94,6 +101,7 @@ func (c *Client) SetJSON(key string, value interface{}) error {
 
 // GetJSON retrieves and unmarshals a JSON value.
 func (c *Client) GetJSON(key string, dest interface{}) error {
+	// SyncIfStale is called by Get, no need to call it here
 	data, err := c.Get(key)
 	if err != nil {
 		return err
@@ -106,6 +114,10 @@ func (c *Client) GetJSON(key string, dest interface{}) error {
 
 // ListKeys returns all keys with the given prefix.
 func (c *Client) ListKeys(prefix string) ([]string, error) {
+	if err := c.SyncIfStale(); err != nil {
+		return nil, fmt.Errorf("failed to sync before read: %w", err)
+	}
+
 	var result []string
 	err := kv.DoReadOnly(c.dbName, func(k *kv.KV) error {
 		keys, err := k.Keys()
@@ -126,6 +138,9 @@ func (c *Client) ListKeys(prefix string) ([]string, error) {
 // DoReadOnly executes a function with read-only database access.
 // Use this for batch read operations that need multiple Gets.
 func (c *Client) DoReadOnly(fn func(k *kv.KV) error) error {
+	if err := c.SyncIfStale(); err != nil {
+		return fmt.Errorf("failed to sync before read: %w", err)
+	}
 	return kv.DoReadOnly(c.dbName, fn)
 }
 
@@ -148,6 +163,38 @@ func (c *Client) Sync() error {
 	return kv.Do(c.dbName, func(k *kv.KV) error {
 		return k.Sync()
 	})
+}
+
+// LastSyncTime returns the last time the database was synced with the server.
+func (c *Client) LastSyncTime() (time.Time, error) {
+	var lastSync time.Time
+	err := kv.DoReadOnly(c.dbName, func(k *kv.KV) error {
+		lastSync = k.LastSyncTime()
+		return nil
+	})
+	return lastSync, err
+}
+
+// IsStale checks if the database needs syncing based on staleThreshold.
+func (c *Client) IsStale() (bool, error) {
+	var stale bool
+	err := kv.DoReadOnly(c.dbName, func(k *kv.KV) error {
+		stale = k.IsStale(c.staleThreshold)
+		return nil
+	})
+	return stale, err
+}
+
+// SyncIfStale syncs the database if it's considered stale.
+func (c *Client) SyncIfStale() error {
+	stale, err := c.IsStale()
+	if err != nil {
+		return fmt.Errorf("failed to check staleness: %w", err)
+	}
+	if !stale {
+		return nil
+	}
+	return c.Sync()
 }
 
 // Reset clears all data (nuclear option).
