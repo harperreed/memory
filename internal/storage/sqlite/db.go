@@ -17,13 +17,17 @@ type DB struct {
 	path string
 }
 
-// DefaultDataDir returns the default data directory for memory storage
+// DefaultDataDir returns the default data directory for memory storage following XDG spec.
 func DefaultDataDir() string {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return ".local/share/memory"
+	dataHome := os.Getenv("XDG_DATA_HOME")
+	if dataHome == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return ".local/share/memory"
+		}
+		dataHome = filepath.Join(homeDir, ".local", "share")
 	}
-	return filepath.Join(homeDir, ".local", "share", "memory")
+	return filepath.Join(dataHome, "memory")
 }
 
 // DefaultDBPath returns the default database file path
