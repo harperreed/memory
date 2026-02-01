@@ -78,7 +78,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("initializing storage: %w", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Create turn
 	turn := &models.Turn{
@@ -127,7 +127,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 			}
 
 			if !quiet {
-				fmt.Fprintf(cmd.OutOrStdout(), "✓ Added memory %s with facts and metadata\n", turn.TurnID)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "✓ Added memory %s with facts and metadata\n", turn.TurnID)
 			}
 			return nil
 		}
@@ -140,7 +140,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 	}
 
 	if !quiet {
-		fmt.Fprintf(cmd.OutOrStdout(), "✓ Added memory %s (block: %s)\n", turn.TurnID, blockID)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "✓ Added memory %s (block: %s)\n", turn.TurnID, blockID)
 	}
 	return nil
 }

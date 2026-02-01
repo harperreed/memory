@@ -37,9 +37,9 @@ func NewVersionCmd() *cobra.Command {
 		Short: "Show version information",
 		Long:  `Display version, commit hash, and build date for the Memory CLI.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Fprintf(cmd.OutOrStdout(), "Memory (HMLR) %s\n", versionInfo.Version)
-			fmt.Fprintf(cmd.OutOrStdout(), "Commit: %s\n", versionInfo.Commit)
-			fmt.Fprintf(cmd.OutOrStdout(), "Built:  %s\n", versionInfo.Date)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Memory (HMLR) %s\n", versionInfo.Version)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Commit: %s\n", versionInfo.Commit)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Built:  %s\n", versionInfo.Date)
 		},
 	}
 

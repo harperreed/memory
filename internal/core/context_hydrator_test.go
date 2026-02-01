@@ -1,9 +1,8 @@
-// ABOUTME: Integration tests for ContextHydrator requiring Charm server
+// ABOUTME: Integration tests for ContextHydrator
 // ABOUTME: Tests prompt assembly structure and token limiting logic
 package core
 
 import (
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -13,25 +12,14 @@ import (
 	"github.com/harper/remember-standalone/internal/storage"
 )
 
-func skipIfNoCharm(t *testing.T) {
-	// Skip tests that require charm if CHARM_HOST is not configured
-	// These are integration tests that need a real charm server
-	if os.Getenv("CHARM_HOST") == "" {
-		t.Skip("Skipping: CHARM_HOST not configured (set to run integration tests)")
-	}
-}
-
 func TestContextHydrator_BasicPromptAssembly(t *testing.T) {
-	skipIfNoCharm(t)
-
-	store, err := storage.NewStorage()
+	store, err := storage.NewStorageInMemory()
 	if err != nil {
 		t.Fatalf("Failed to create storage: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Create a simple bridge block with conversation history
-	// Note: Tests use the configured charm server for storage
 	turn1 := &models.Turn{
 		TurnID:      "turn_" + uuid.New().String(),
 		Timestamp:   time.Now(),
@@ -121,7 +109,7 @@ func TestContextHydrator_BasicPromptAssembly(t *testing.T) {
 			t.Fatalf("Failed to hydrate: %v", err)
 		}
 
-		// Approximate token count (4 chars ≈ 1 token)
+		// Approximate token count (4 chars = 1 token)
 		approxTokens := len(prompt) / 4
 
 		t.Logf("Token limit: 100, Actual: ~%d, Chars: %d", approxTokens, len(prompt))
@@ -143,13 +131,11 @@ func TestContextHydrator_BasicPromptAssembly(t *testing.T) {
 }
 
 func TestContextHydrator_MultiTurnHistory(t *testing.T) {
-	skipIfNoCharm(t)
-
-	store, err := storage.NewStorage()
+	store, err := storage.NewStorageInMemory()
 	if err != nil {
 		t.Fatalf("Failed to create storage: %v", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Create a block with multiple turns
 	turn1 := &models.Turn{

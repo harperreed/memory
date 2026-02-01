@@ -48,7 +48,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("initializing storage: %w", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	var blocks []*storage.BridgeBlockInfo
 	if listAll {
@@ -93,7 +93,7 @@ func runList(cmd *cobra.Command, args []string) error {
 
 	if len(blocks) == 0 {
 		if !quiet {
-			fmt.Fprintf(cmd.OutOrStdout(), "No memories found\n")
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "No memories found\n")
 		}
 		return nil
 	}
@@ -104,12 +104,12 @@ func runList(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("marshaling JSON: %w", err)
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "%s\n", jsonData)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", jsonData)
 	} else {
 		// Table format
 		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-		fmt.Fprintf(w, "TOPIC\tSTATUS\tTURNS\tCREATED\tBLOCK ID\n")
-		fmt.Fprintf(w, "-----\t------\t-----\t-------\t--------\n")
+		_, _ = fmt.Fprintf(w, "TOPIC\tSTATUS\tTURNS\tCREATED\tBLOCK ID\n")
+		_, _ = fmt.Fprintf(w, "-----\t------\t-----\t-------\t--------\n")
 
 		for _, block := range blocks {
 			createdStr := formatTime(block.CreatedAt)
@@ -118,17 +118,17 @@ func runList(cmd *cobra.Command, args []string) error {
 				topic = "(no topic)"
 			}
 
-			fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\n",
+			_, _ = fmt.Fprintf(w, "%s\t%s\t%d\t%s\t%s\n",
 				truncate(topic, 30),
 				block.Status,
 				block.TurnCount,
 				createdStr,
 				truncate(block.BlockID, 25))
 		}
-		w.Flush()
+		_ = w.Flush()
 
 		if !quiet {
-			fmt.Fprintf(cmd.OutOrStdout(), "\nTotal: %d block(s)\n", len(blocks))
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\nTotal: %d block(s)\n", len(blocks))
 		}
 	}
 

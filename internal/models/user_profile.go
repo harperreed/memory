@@ -1,5 +1,5 @@
 // ABOUTME: UserProfile represents user context and preferences
-// ABOUTME: Stored in Charm KV via the Storage layer
+// ABOUTME: Stored in SQLite via the Storage layer
 package models
 
 import (

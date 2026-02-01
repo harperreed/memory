@@ -56,7 +56,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("initializing storage: %w", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Search memories
 	results, err := store.SearchMemory(query, searchLimit)
@@ -66,7 +66,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 
 	if len(results) == 0 {
 		if !quiet {
-			fmt.Fprintf(cmd.OutOrStdout(), "No memories found for query: %s\n", query)
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "No memories found for query: %s\n", query)
 		}
 		return nil
 	}
@@ -77,12 +77,12 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("marshaling JSON: %w", err)
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "%s\n", jsonData)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", jsonData)
 	} else {
 		// Table format
 		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
-		fmt.Fprintf(w, "SCORE\tTOPIC\tBLOCK ID\tPREVIEW\n")
-		fmt.Fprintf(w, "-----\t-----\t--------\t-------\n")
+		_, _ = fmt.Fprintf(w, "SCORE\tTOPIC\tBLOCK ID\tPREVIEW\n")
+		_, _ = fmt.Fprintf(w, "-----\t-----\t--------\t-------\n")
 
 		for _, result := range results {
 			topic := result.TopicLabel
@@ -95,16 +95,16 @@ func runSearch(cmd *cobra.Command, args []string) error {
 				preview = result.Turns[0].UserMessage
 			}
 
-			fmt.Fprintf(w, "%.3f\t%s\t%s\t%s\n",
+			_, _ = fmt.Fprintf(w, "%.3f\t%s\t%s\t%s\n",
 				result.RelevanceScore,
 				truncate(topic, 20),
 				truncate(result.BlockID, 25),
 				truncate(preview, 60))
 		}
-		w.Flush()
+		_ = w.Flush()
 
 		if !quiet {
-			fmt.Fprintf(cmd.OutOrStdout(), "\nFound %d result(s)\n", len(results))
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\nFound %d result(s)\n", len(results))
 		}
 	}
 

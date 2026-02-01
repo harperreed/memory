@@ -5,17 +5,15 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 )
 
 // Config holds all configuration for the memory system
 type Config struct {
-	// Charm settings
-	CharmHost      string
-	CharmDBName    string
-	AutoSync       bool
-	StaleThreshold time.Duration
+	// Storage settings (SQLite)
+	DataDir string
 
 	// OpenAI settings
 	OpenAIKey      string
@@ -30,14 +28,20 @@ type Config struct {
 	VectorDimension     int
 }
 
+// DefaultDataDir returns the default data directory
+func DefaultDataDir() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return ".local/share/memory"
+	}
+	return filepath.Join(homeDir, ".local", "share", "memory")
+}
+
 // Load reads configuration from environment variables
 func Load() (*Config, error) {
 	cfg := &Config{
 		// Defaults
-		CharmHost:           getEnv("CHARM_HOST", "cloud.charm.sh"),
-		CharmDBName:         getEnv("CHARM_DB", "memory"),
-		AutoSync:            getEnvBool("CHARM_AUTO_SYNC", true),
-		StaleThreshold:      getEnvDuration("CHARM_STALE_THRESHOLD", 5*time.Minute),
+		DataDir:             getEnv("MEMORY_DATA_DIR", DefaultDataDir()),
 		OpenAIKey:           os.Getenv("OPENAI_API_KEY"),
 		ChatModel:           getEnv("MEMORY_OPENAI_MODEL", "gpt-4o-mini"),
 		EmbeddingModel:      getEnv("MEMORY_EMBEDDING_MODEL", "text-embedding-3-small"),
@@ -61,20 +65,17 @@ func (c *Config) Validate() error {
 	return nil
 }
 
+// DBPath returns the database file path
+func (c *Config) DBPath() string {
+	return filepath.Join(c.DataDir, "memory.db")
+}
+
 // Helper functions
 func getEnv(key, defaultVal string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
 	}
 	return defaultVal
-}
-
-func getEnvBool(key string, defaultVal bool) bool {
-	v := os.Getenv(key)
-	if v == "" {
-		return defaultVal
-	}
-	return v == "true" || v == "1"
 }
 
 func getEnvInt(key string, defaultVal int) int {

@@ -4,6 +4,7 @@ package config
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -18,14 +19,8 @@ func TestLoad_Defaults(t *testing.T) {
 	}
 
 	// Verify defaults
-	if cfg.CharmHost != "cloud.charm.sh" {
-		t.Errorf("CharmHost = %s, want cloud.charm.sh", cfg.CharmHost)
-	}
-	if cfg.CharmDBName != "memory" {
-		t.Errorf("CharmDBName = %s, want memory", cfg.CharmDBName)
-	}
-	if !cfg.AutoSync {
-		t.Error("AutoSync = false, want true")
+	if !strings.Contains(cfg.DataDir, "memory") {
+		t.Errorf("DataDir = %s, expected to contain 'memory'", cfg.DataDir)
 	}
 	if cfg.ChatModel != "gpt-4o-mini" {
 		t.Errorf("ChatModel = %s, want gpt-4o-mini", cfg.ChatModel)
@@ -53,17 +48,15 @@ func TestLoad_Defaults(t *testing.T) {
 func TestLoad_CustomValues(t *testing.T) {
 	// Set custom environment variables
 	os.Clearenv()
-	os.Setenv("CHARM_HOST", "custom.charm.sh")
-	os.Setenv("CHARM_DB", "test_db")
-	os.Setenv("CHARM_AUTO_SYNC", "false")
-	os.Setenv("OPENAI_API_KEY", "test-key")
-	os.Setenv("MEMORY_OPENAI_MODEL", "gpt-4")
-	os.Setenv("MEMORY_EMBEDDING_MODEL", "text-embedding-3-large")
-	os.Setenv("OPENAI_TIMEOUT", "60s")
-	os.Setenv("OPENAI_MAX_RETRIES", "5")
-	os.Setenv("OPENAI_RETRY_DELAY", "3s")
-	os.Setenv("TOPIC_MATCH_THRESHOLD", "0.5")
-	os.Setenv("VECTOR_DIMENSION", "3072")
+	_ = os.Setenv("MEMORY_DATA_DIR", "/tmp/memory-test")
+	_ = os.Setenv("OPENAI_API_KEY", "test-key")
+	_ = os.Setenv("MEMORY_OPENAI_MODEL", "gpt-4")
+	_ = os.Setenv("MEMORY_EMBEDDING_MODEL", "text-embedding-3-large")
+	_ = os.Setenv("OPENAI_TIMEOUT", "60s")
+	_ = os.Setenv("OPENAI_MAX_RETRIES", "5")
+	_ = os.Setenv("OPENAI_RETRY_DELAY", "3s")
+	_ = os.Setenv("TOPIC_MATCH_THRESHOLD", "0.5")
+	_ = os.Setenv("VECTOR_DIMENSION", "3072")
 
 	cfg, err := Load()
 	if err != nil {
@@ -71,14 +64,8 @@ func TestLoad_CustomValues(t *testing.T) {
 	}
 
 	// Verify custom values
-	if cfg.CharmHost != "custom.charm.sh" {
-		t.Errorf("CharmHost = %s, want custom.charm.sh", cfg.CharmHost)
-	}
-	if cfg.CharmDBName != "test_db" {
-		t.Errorf("CharmDBName = %s, want test_db", cfg.CharmDBName)
-	}
-	if cfg.AutoSync {
-		t.Error("AutoSync = true, want false")
+	if cfg.DataDir != "/tmp/memory-test" {
+		t.Errorf("DataDir = %s, want /tmp/memory-test", cfg.DataDir)
 	}
 	if cfg.OpenAIKey != "test-key" {
 		t.Errorf("OpenAIKey = %s, want test-key", cfg.OpenAIKey)
@@ -142,31 +129,23 @@ func TestValidate_InvalidMaxRetries(t *testing.T) {
 	}
 }
 
-func TestGetEnvBool(t *testing.T) {
-	tests := []struct {
-		name       string
-		value      string
-		defaultVal bool
-		want       bool
-	}{
-		{"empty uses default true", "", true, true},
-		{"empty uses default false", "", false, false},
-		{"true", "true", false, true},
-		{"1", "1", false, true},
-		{"false", "false", true, false},
-		{"0", "0", true, false},
+func TestDBPath(t *testing.T) {
+	cfg := &Config{
+		DataDir: "/tmp/memory-test",
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			os.Clearenv()
-			if tt.value != "" {
-				os.Setenv("TEST_BOOL", tt.value)
-			}
-			got := getEnvBool("TEST_BOOL", tt.defaultVal)
-			if got != tt.want {
-				t.Errorf("getEnvBool() = %v, want %v", got, tt.want)
-			}
-		})
+	expected := "/tmp/memory-test/memory.db"
+	if cfg.DBPath() != expected {
+		t.Errorf("DBPath() = %s, want %s", cfg.DBPath(), expected)
+	}
+}
+
+func TestDefaultDataDir(t *testing.T) {
+	dir := DefaultDataDir()
+	if dir == "" {
+		t.Error("DefaultDataDir() returned empty string")
+	}
+	if !strings.Contains(dir, "memory") {
+		t.Errorf("DefaultDataDir() = %s, expected to contain 'memory'", dir)
 	}
 }

@@ -71,7 +71,7 @@ func NewBenchmarkRunner(apiKey string, verbose bool) (*BenchmarkRunner, error) {
 // Close cleans up benchmark runner resources
 func (r *BenchmarkRunner) Close() {
 	if r.storage != nil {
-		r.storage.Close()
+		_ = r.storage.Close()
 	}
 }
 
@@ -87,16 +87,16 @@ func (r *BenchmarkRunner) RunTest(scenario TestScenario) (TestResult, error) {
 	// Create fresh storage for this test with unique XDG directory
 	tmpDir := filepath.Join(os.TempDir(), fmt.Sprintf("hmlr_test_%s_%d", scenario.ID, time.Now().UnixNano()))
 	oldXdgDataHome := os.Getenv("XDG_DATA_HOME")
-	os.Setenv("XDG_DATA_HOME", tmpDir)
+	_ = os.Setenv("XDG_DATA_HOME", tmpDir)
 
 	// Close old storage and create new one
 	if r.storage != nil {
-		r.storage.Close()
+		_ = r.storage.Close()
 	}
 
 	newStorage, err := storage.NewStorage()
 	if err != nil {
-		os.Setenv("XDG_DATA_HOME", oldXdgDataHome)
+		_ = os.Setenv("XDG_DATA_HOME", oldXdgDataHome)
 		return TestResult{}, fmt.Errorf("failed to create test storage: %w", err)
 	}
 	r.storage = newStorage
@@ -106,8 +106,8 @@ func (r *BenchmarkRunner) RunTest(scenario TestScenario) (TestResult, error) {
 
 	// Cleanup will restore XDG_DATA_HOME
 	defer func() {
-		os.Setenv("XDG_DATA_HOME", oldXdgDataHome)
-		os.RemoveAll(tmpDir)
+		_ = os.Setenv("XDG_DATA_HOME", oldXdgDataHome)
+		_ = os.RemoveAll(tmpDir)
 	}()
 
 	// Setup phase

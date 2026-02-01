@@ -1,5 +1,5 @@
 // ABOUTME: Unit tests for vector storage functionality
-// ABOUTME: Tests cosine similarity calculation (charm integration tested elsewhere)
+// ABOUTME: Tests cosine similarity calculation
 package storage
 
 import (
@@ -60,7 +60,7 @@ func TestCosineSimilarity(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := cosineSimilarity(tt.a, tt.b)
+			result := CosineSimilarity(tt.a, tt.b)
 			if abs(result-tt.expected) > tt.delta {
 				t.Errorf("cosineSimilarity(%v, %v) = %.4f, expected %.4f (delta %.4f)",
 					tt.a, tt.b, result, tt.expected, tt.delta)

@@ -62,6 +62,7 @@ HMLR Architecture Components:
 	cmd.AddCommand(NewVersionCmd())
 	cmd.AddCommand(NewSyncCmd())
 	cmd.AddCommand(NewProfileCmd())
+	cmd.AddCommand(NewExportCmd())
 
 	return cmd
 }

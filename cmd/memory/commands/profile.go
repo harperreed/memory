@@ -71,7 +71,7 @@ func runProfileShow(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("initializing storage: %w", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	profile, err := store.GetUserProfile()
 	if err != nil {
@@ -80,7 +80,7 @@ func runProfileShow(cmd *cobra.Command, args []string) error {
 
 	if profile == nil {
 		if !quiet {
-			fmt.Fprintf(cmd.OutOrStdout(), "No profile found. Create one with: memory profile set --name \"Your Name\"\n")
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "No profile found. Create one with: memory profile set --name \"Your Name\"\n")
 		}
 		return nil
 	}
@@ -91,48 +91,48 @@ func runProfileShow(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("marshaling JSON: %w", err)
 		}
-		fmt.Fprintf(cmd.OutOrStdout(), "%s\n", jsonData)
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "%s\n", jsonData)
 	} else {
 		// Table format
 		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 2, ' ', 0)
 
-		fmt.Fprintf(w, "FIELD\tVALUE\n")
-		fmt.Fprintf(w, "-----\t-----\n")
+		_, _ = fmt.Fprintf(w, "FIELD\tVALUE\n")
+		_, _ = fmt.Fprintf(w, "-----\t-----\n")
 
 		name := profile.Name
 		if name == "" {
 			name = "(not set)"
 		}
-		fmt.Fprintf(w, "Name\t%s\n", name)
+		_, _ = fmt.Fprintf(w, "Name\t%s\n", name)
 
 		prefs := "(none)"
 		if len(profile.Preferences) > 0 {
 			prefs = strings.Join(profile.Preferences, ", ")
 		}
-		fmt.Fprintf(w, "Preferences\t%s\n", truncate(prefs, 60))
+		_, _ = fmt.Fprintf(w, "Preferences\t%s\n", truncate(prefs, 60))
 
 		topics := "(none)"
 		if len(profile.TopicsOfInterest) > 0 {
 			topics = strings.Join(profile.TopicsOfInterest, ", ")
 		}
-		fmt.Fprintf(w, "Topics\t%s\n", truncate(topics, 60))
+		_, _ = fmt.Fprintf(w, "Topics\t%s\n", truncate(topics, 60))
 
-		fmt.Fprintf(w, "Last Updated\t%s\n", formatTime(profile.LastUpdated))
+		_, _ = fmt.Fprintf(w, "Last Updated\t%s\n", formatTime(profile.LastUpdated))
 
-		w.Flush()
+		_ = w.Flush()
 
 		// Show full lists if truncated
 		if len(profile.Preferences) > 0 && len(prefs) > 60 {
-			fmt.Fprintf(cmd.OutOrStdout(), "\nPreferences:\n")
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\nPreferences:\n")
 			for _, p := range profile.Preferences {
-				fmt.Fprintf(cmd.OutOrStdout(), "  • %s\n", p)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  • %s\n", p)
 			}
 		}
 
 		if len(profile.TopicsOfInterest) > 0 && len(topics) > 60 {
-			fmt.Fprintf(cmd.OutOrStdout(), "\nTopics of Interest:\n")
+			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\nTopics of Interest:\n")
 			for _, t := range profile.TopicsOfInterest {
-				fmt.Fprintf(cmd.OutOrStdout(), "  • %s\n", t)
+				_, _ = fmt.Fprintf(cmd.OutOrStdout(), "  • %s\n", t)
 			}
 		}
 	}
@@ -154,7 +154,7 @@ func runProfileSet(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("initializing storage: %w", err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Get existing profile or create new one
 	profile, err := store.GetUserProfile()
@@ -189,7 +189,7 @@ func runProfileSet(cmd *cobra.Command, args []string) error {
 	}
 
 	if !quiet {
-		fmt.Fprintf(cmd.OutOrStdout(), "Profile updated successfully\n")
+		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Profile updated successfully\n")
 	}
 
 	return nil
